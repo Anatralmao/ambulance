@@ -1,1 +1,1 @@
-chó việt ăn c
+#thang an cut
