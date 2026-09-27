@@ -1,1 +1,1 @@
-địt cụ thằng Việt
+chó việt ăn c
