@@ -2,7 +2,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 
 roads = gpd.read_file(
-    "data/raw/osm/hanoi.osm.pbf",
+    "hanoi.osm.pbf",
     layer="lines"
 )
 
