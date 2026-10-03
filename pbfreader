@@ -1,8 +1,9 @@
 import osmium
+import osmium
 import shapely.wkb
 from pyproj import Geod
 
-# Geod giúp tính độ dài chính xác theo độ cong Trái Đất (WGS84)
+# Khởi tạo Geod để tính độ dài thực tế theo độ cong Trái Đất
 geod = Geod(ellps="WGS84")
 
 class HighwayHandler(osmium.SimpleHandler):
@@ -12,19 +13,18 @@ class HighwayHandler(osmium.SimpleHandler):
         self.highways = []
 
     def way(self, w):
-        # Chỉ lọc các đối tượng có thẻ 'highway' (đường giao thông)
+        # Lọc các đường giao thông
         if 'highway' in w.tags:
-            # Kiểm tra thuộc tính 'bridge' (cầu)
             is_bridge = w.tags.get('bridge') in ['yes', 'true', '1']
             name = w.tags.get('name', 'Không tên')
             highway_type = w.tags.get('highway')
 
             try:
-                # Tạo đối tượng LineString từ tọa độ của đường
+                # Tạo LineString từ Way
                 wkb_data = self.wkbf.create_linestring(w)
                 line = shapely.wkb.loads(bytes.fromhex(wkb_data))
                 
-                # Tính độ dài thực tế của đường (đơn vị: mét)
+                # Tính độ dài thực tế (đơn vị: mét)
                 length_meters = round(abs(geod.geometry_length(line)), 2)
 
                 self.highways.append({
@@ -34,18 +34,19 @@ class HighwayHandler(osmium.SimpleHandler):
                     'is_bridge': is_bridge,
                     'length_meters': length_meters
                 })
-            except RuntimeError:
-                # Bỏ qua nếu đoạn đường thiếu tọa độ của các điểm (nodes)
+            # Sửa đoạn này: Bắt thêm lỗi InvalidLocationError của osmium
+            except (RuntimeError, osmium.InvalidLocationError, Exception):
+                # Bỏ qua các đoạn đường thiếu tọa độ nút
                 pass
 
-# === THỰC THI ===
+# === CHẠY CHƯƠNG TRÌNH ===
 handler = HighwayHandler()
 
-# LƯU Ý: Phải bật `locations=True` để lấy được vị trí (lat/lon) của các node tạo nên con đường
-handler.apply_file("D:\Data\AI tim duong\ambulance\hanoi.osm.pbf", locations=True)
+# Đổi đường dẫn tới file hanoi.osm.pbf của bạn
+handler.apply_file("hanoi.osm.pbf", locations=True)
 
-print(f"Lấy thành công {len(handler.highways)} đoạn đường.\n")
+print(f"Đã xử lý xong! Lấy thành công {len(handler.highways)} đoạn đường.\n")
 
-# In ra 10 đoạn đường đầu tiên
+# In ra 10 đoạn đường mẫu
 for road in handler.highways[:10]:
-    print(f"ID: {road['id']} | Tên: {road['name']} | Loại: {road['type']} | Là cầu: {road['is_bridge']} | Dài: {road['length_meters']}m")
+    print(f"ID: {road['id']} | Tên: {road['name']} | Loại: {road['type']} | Cầu: {road['is_bridge']} | Dài: {road['length_meters']}m")
