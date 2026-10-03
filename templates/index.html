@@ -1,0 +1,109 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#09111b" />
+    <meta name="description" content="Ambulance route planning dashboard" />
+    <title>Ambufind | Emergency Route Planner</title>
+    <link rel="stylesheet" href="/static/CSS/app.css" />
+    <script src="/static/JS/app.js" defer></script>
+  </head>
+  <body data-theme="dark">
+    <main class="app-shell">
+      <section class="map" aria-label="Route map">
+        <div class="map-grid" aria-hidden="true"></div>
+        <svg class="map-art" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Illustrated city map with an ambulance route">
+          <defs>
+            <pattern id="blocks" width="240" height="180" patternUnits="userSpaceOnUse">
+              <rect x="18" y="18" width="74" height="48" rx="3" class="block" />
+              <rect x="112" y="18" width="94" height="48" rx="3" class="block" />
+              <rect x="18" y="90" width="48" height="68" rx="3" class="block" />
+              <rect x="86" y="90" width="120" height="68" rx="3" class="block" />
+            </pattern>
+            <filter id="route-glow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="8" />
+            </filter>
+          </defs>
+          <rect width="1440" height="900" fill="url(#blocks)" />
+          <path class="water" d="M1160 900c80-140 120-210 280-230v230zM0 0h115c25 80-35 105-115 120z" />
+          <path class="park" d="M520 315h100v68H520zM970 585h110v76H970zM175 555h92v66h-92zM745 105h88v55h-88z" />
+          <g class="minor-roads">
+            <path d="M0 100h1440M0 220h1440M0 340h1440M0 460h1440M0 580h1440M0 700h1440M0 820h1440" />
+            <path d="M120 0v900M240 0v900M360 0v900M480 0v900M600 0v900M720 0v900M840 0v900M960 0v900M1080 0v900M1200 0v900M1320 0v900" />
+          </g>
+          <g class="major-roads">
+            <path d="M0 390h1440M0 650h1440M440 0v900M900 0v900M1190 0v900" />
+          </g>
+          <path class="highway" d="M-30 835 1470 50M-30 875 1470 90" />
+          <path id="route-glow-line" class="route-glow" d="M260 735 350 630 430 555 515 470 620 415 710 330 820 270 930 220 1040 185 1175 170" />
+          <path id="route-line" class="route-line" d="M260 735 350 630 430 555 515 470 620 415 710 330 820 270 930 220 1040 185 1175 170" />
+          <g class="route-stops"><circle cx="430" cy="555" r="5"/><circle cx="620" cy="415" r="5"/><circle cx="820" cy="270" r="5"/><circle cx="1040" cy="185" r="5"/></g>
+          <g class="pin pin-start"><circle cx="260" cy="735" r="19"/><text x="260" y="740">A</text></g>
+          <g class="pin pin-end"><circle cx="1175" cy="170" r="19"/><text x="1175" y="175">B</text></g>
+          <g class="map-labels"><text x="225" y="780">DISPATCH</text><text x="1120" y="130">HOSPITAL</text><text x="670" y="510">CENTRAL DISTRICT</text></g>
+        </svg>
+        <div class="map-vignette" aria-hidden="true"></div>
+        <div class="map-controls" aria-label="Map zoom controls">
+          <button class="icon-button zoom-button" id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+          <button class="icon-button zoom-button" id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">-</button>
+        </div>
+        <div class="map-scale"><span></span>1 km</div>
+        <div class="map-credit">Illustrative map - Not for navigation</div>
+      </section>
+
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Ambufind home"><span class="brand-mark">A</span><span>AMBU<span class="brand-accent">FIND</span><small>EMERGENCY ROUTE SYSTEM</small></span></a>
+        <div class="system-state"><span class="live-dot"></span> SYSTEM READY <span class="state-divider"></span> CITY GRID / 01</div>
+        <button class="icon-button theme-button" id="theme-toggle" type="button" title="Toggle color theme" aria-label="Switch to light mode">&#9788;</button>
+      </header>
+
+      <aside class="control-panel" aria-label="Route controls">
+        <div class="panel-heading"><div><span class="eyebrow">DISPATCH CONSOLE</span><h1>Route planner</h1></div><span class="panel-index">01 / 03</span></div>
+        <label class="field-label" for="test-case">TEST SCENARIO</label>
+        <select id="test-case" class="select-control">
+          <option value="">Select a test case</option>
+          <option>TC-01: Hospital A to Hospital B</option>
+          <option>TC-02: Station 3 to Emergency Zone 7</option>
+          <option>TC-03: Downtown HQ to Airport Triage</option>
+          <option>TC-04: North Grid to South Grid</option>
+          <option>TC-05: Rush Hour Cross-City</option>
+          <option>TC-06: Night Shift Route Check</option>
+        </select>
+        <label class="field-label" for="algorithm">ROUTING ALGORITHM</label>
+        <select id="algorithm" class="select-control">
+          <option value="">Select an algorithm</option>
+          <option>Dijkstra's Algorithm</option>
+          <option>A* Search</option>
+          <option>Bellman-Ford</option>
+          <option>BFS (Breadth-First)</option>
+          <option>DFS (Depth-First)</option>
+          <option>Floyd-Warshall</option>
+        </select>
+        <button class="history-trigger" id="history-toggle" type="button" aria-expanded="false" aria-controls="history-menu">
+          <span class="history-icon" aria-hidden="true">&#9719;</span><span>Session recordings</span><span class="history-count" id="history-count">0</span><span class="chevron" aria-hidden="true">&#8964;</span>
+        </button>
+        <div class="history-menu" id="history-menu" hidden>
+          <div class="history-title">RECENT SESSIONS <span id="history-menu-count">0</span></div>
+          <div id="history-list"></div>
+        </div>
+        <div class="panel-foot"><span class="foot-marker"></span> ROUTE OUTPUT <span class="foot-value">SIMULATION MODE</span></div>
+      </aside>
+
+      <div class="map-legend"><span class="legend-line"></span> OPTIMIZED ROUTE <span class="legend-dot"></span> NETWORK NODE</div>
+
+      <section class="results-panel" id="results-panel" aria-label="Route results" hidden>
+        <div class="results-head"><div><span class="eyebrow">ROUTE ANALYSIS</span><h2>Recommended paths</h2></div><span class="result-tag">SIMULATED</span></div>
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>TIME</th><th>GRAPH</th><th>ROAD</th><th>VIA</th><th>TOTAL</th></tr></thead><tbody id="results-body"></tbody></table></div>
+      </section>
+
+      <div class="route-action">
+        <div class="route-status" id="route-status" role="status" aria-live="polite"><span class="status-dot"></span><span id="status-text">SELECT A SCENARIO TO BEGIN</span></div>
+        <button class="find-button" id="find-route" type="button"><span class="button-icon" aria-hidden="true">&#10148;</span><span id="button-text">Find route</span><span class="button-arrow" aria-hidden="true">&#8599;</span></button>
+        <p>Route estimates are for interface demonstration only</p>
+      </div>
+    </main>
+  </body>
+</html>
+  
