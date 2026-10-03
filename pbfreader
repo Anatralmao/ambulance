@@ -1,0 +1,51 @@
+import osmium
+import shapely.wkb
+from pyproj import Geod
+
+# Geod giúp tính độ dài chính xác theo độ cong Trái Đất (WGS84)
+geod = Geod(ellps="WGS84")
+
+class HighwayHandler(osmium.SimpleHandler):
+    def __init__(self):
+        super().__init__()
+        self.wkbf = osmium.geom.WKBFactory()
+        self.highways = []
+
+    def way(self, w):
+        # Chỉ lọc các đối tượng có thẻ 'highway' (đường giao thông)
+        if 'highway' in w.tags:
+            # Kiểm tra thuộc tính 'bridge' (cầu)
+            is_bridge = w.tags.get('bridge') in ['yes', 'true', '1']
+            name = w.tags.get('name', 'Không tên')
+            highway_type = w.tags.get('highway')
+
+            try:
+                # Tạo đối tượng LineString từ tọa độ của đường
+                wkb_data = self.wkbf.create_linestring(w)
+                line = shapely.wkb.loads(bytes.fromhex(wkb_data))
+                
+                # Tính độ dài thực tế của đường (đơn vị: mét)
+                length_meters = round(abs(geod.geometry_length(line)), 2)
+
+                self.highways.append({
+                    'id': w.id,
+                    'name': name,
+                    'type': highway_type,
+                    'is_bridge': is_bridge,
+                    'length_meters': length_meters
+                })
+            except RuntimeError:
+                # Bỏ qua nếu đoạn đường thiếu tọa độ của các điểm (nodes)
+                pass
+
+# === THỰC THI ===
+handler = HighwayHandler()
+
+# LƯU Ý: Phải bật `locations=True` để lấy được vị trí (lat/lon) của các node tạo nên con đường
+handler.apply_file("D:\Data\AI tim duong\ambulance\hanoi.osm.pbf", locations=True)
+
+print(f"Lấy thành công {len(handler.highways)} đoạn đường.\n")
+
+# In ra 10 đoạn đường đầu tiên
+for road in handler.highways[:10]:
+    print(f"ID: {road['id']} | Tên: {road['name']} | Loại: {road['type']} | Là cầu: {road['is_bridge']} | Dài: {road['length_meters']}m")
