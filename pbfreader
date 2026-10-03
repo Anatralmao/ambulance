@@ -1,0 +1,31 @@
+import osmium
+
+class OSMHandler(osmium.SimpleHandler):
+    def __init__(self):
+        super().__init__()
+        self.node_count = 0
+
+    # Hàm được gọi tự động khi đọc tới mỗi Node (điểm tọa độ)
+    def node(self, n):
+        self.node_count += 1
+        # In thử 5 điểm đầu tiên
+        if self.node_count <= 5:
+            print(f"Node ID: {n.id} | Vị trí: Lat {n.location.lat}, Lon {n.location.lon}")
+            # In các thẻ (tags) đi kèm nếu có (ví dụ: name, amenity,...)
+            for tag in n.tags:
+                print(f"   Tag: {tag.k} = {tag.v}")
+
+    # Hàm được gọi khi đọc tới các Way (đường đi / ranh giới)
+    def way(self, w):
+        pass
+
+    # Hàm được gọi khi đọc tới các Relation (mối quan hệ liên kết)
+    def relation(self, r):
+        pass
+
+# Khởi tạo handler và đọc file
+handler = OSMHandler()
+# Thay đổi đường dẫn đến file .osm.pbf của bạn
+handler.apply_file("D:\Data\AI tim duong\ambulance\hanoi.osm.pbf")
+
+print(f"\nTổng số Node đọc được: {handler.node_count}")
