@@ -7,50 +7,19 @@
     <meta name="theme-color" content="#09111b" />
     <meta name="description" content="Ambulance route planning dashboard" />
     <title>Ambufind | Emergency Route Planner</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="/static/CSS/app.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
     <script src="/static/JS/app.js" defer></script>
   </head>
   <body data-theme="dark">
     <main class="app-shell">
       <section class="map" aria-label="Route map">
-        <div class="map-grid" aria-hidden="true"></div>
-        <svg class="map-art" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Illustrated city map with an ambulance route">
-          <defs>
-            <pattern id="blocks" width="240" height="180" patternUnits="userSpaceOnUse">
-              <rect x="18" y="18" width="74" height="48" rx="3" class="block" />
-              <rect x="112" y="18" width="94" height="48" rx="3" class="block" />
-              <rect x="18" y="90" width="48" height="68" rx="3" class="block" />
-              <rect x="86" y="90" width="120" height="68" rx="3" class="block" />
-            </pattern>
-            <filter id="route-glow" x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="8" />
-            </filter>
-          </defs>
-          <rect width="1440" height="900" fill="url(#blocks)" />
-          <path class="water" d="M1160 900c80-140 120-210 280-230v230zM0 0h115c25 80-35 105-115 120z" />
-          <path class="park" d="M520 315h100v68H520zM970 585h110v76H970zM175 555h92v66h-92zM745 105h88v55h-88z" />
-          <g class="minor-roads">
-            <path d="M0 100h1440M0 220h1440M0 340h1440M0 460h1440M0 580h1440M0 700h1440M0 820h1440" />
-            <path d="M120 0v900M240 0v900M360 0v900M480 0v900M600 0v900M720 0v900M840 0v900M960 0v900M1080 0v900M1200 0v900M1320 0v900" />
-          </g>
-          <g class="major-roads">
-            <path d="M0 390h1440M0 650h1440M440 0v900M900 0v900M1190 0v900" />
-          </g>
-          <path class="highway" d="M-30 835 1470 50M-30 875 1470 90" />
-          <path id="route-glow-line" class="route-glow" d="M260 735 350 630 430 555 515 470 620 415 710 330 820 270 930 220 1040 185 1175 170" />
-          <path id="route-line" class="route-line" d="M260 735 350 630 430 555 515 470 620 415 710 330 820 270 930 220 1040 185 1175 170" />
-          <g class="route-stops"><circle cx="430" cy="555" r="5"/><circle cx="620" cy="415" r="5"/><circle cx="820" cy="270" r="5"/><circle cx="1040" cy="185" r="5"/></g>
-          <g class="pin pin-start"><circle cx="260" cy="735" r="19"/><text x="260" y="740">A</text></g>
-          <g class="pin pin-end"><circle cx="1175" cy="170" r="19"/><text x="1175" y="175">B</text></g>
-          <g class="map-labels"><text x="225" y="780">DISPATCH</text><text x="1120" y="130">HOSPITAL</text><text x="670" y="510">CENTRAL DISTRICT</text></g>
-        </svg>
-        <div class="map-vignette" aria-hidden="true"></div>
+        <div id="hanoi-map" role="img" aria-label="Street map of Hanoi"></div>
         <div class="map-controls" aria-label="Map zoom controls">
           <button class="icon-button zoom-button" id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
           <button class="icon-button zoom-button" id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">-</button>
         </div>
-        <div class="map-scale"><span></span>1 km</div>
-        <div class="map-credit">Illustrative map - Not for navigation</div>
       </section>
 
       <header class="topbar">

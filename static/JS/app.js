@@ -29,8 +29,31 @@ const historyMenu = byId("history-menu");
 const historyButton = byId("history-toggle");
 const resultsPanel = byId("results-panel");
 const resultBody = byId("results-body");
+const map = L.map("hanoi-map", { zoomControl: false }).setView([21.0285, 105.8542], 12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 20,
+  attribution: "&copy; OpenStreetMap contributors",
+}).addTo(map);
+
+const demoRoute = [
+  [21.0435, 105.8231],
+  [21.0381, 105.8314],
+  [21.0322, 105.8406],
+  [21.0285, 105.8542],
+  [21.0201, 105.8581],
+  [21.0069, 105.8434],
+];
+let routeLayer;
+const routeMarkers = [
+  { point: demoRoute[0], label: "DISPATCH", color: "#26845f" },
+  { point: demoRoute[demoRoute.length - 1], label: "HOSPITAL", color: "#d84942" },
+];
+routeMarkers.forEach(({ point, label, color }) => {
+  L.circleMarker(point, { radius: 8, color: "#ffffff", weight: 2, fillColor: color, fillOpacity: 1 })
+    .bindTooltip(label, { permanent: true, direction: "top", offset: [0, -8], className: "route-label" })
+    .addTo(map);
+});
 let sessions = loadSessions();
-let mapZoom = 1;
 
 function loadSessions() {
   try {
@@ -107,14 +130,12 @@ async function findRoute() {
   historyMenu.hidden = true;
   historyButton.setAttribute("aria-expanded", "false");
   resultsPanel.hidden = true;
-  document.querySelector(".route-line").style.strokeDasharray = "1";
-  document.querySelector(".route-line").style.strokeDashoffset = "1";
-  document.querySelector(".route-glow").style.opacity = ".08";
+  if (routeLayer) map.removeLayer(routeLayer);
+  routeLayer = L.polyline(demoRoute, { color: "#e34b45", weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round" }).addTo(map);
+  map.fitBounds(routeLayer.getBounds(), { padding: [90, 90], maxZoom: 14 });
 
   await new Promise((resolve) => window.setTimeout(resolve, 1100));
 
-  document.querySelector(".route-line").style.strokeDashoffset = "0";
-  document.querySelector(".route-glow").style.opacity = ".32";
   renderResults();
   sessions.push({
     testCase: testCaseSelect.value,
@@ -156,12 +177,10 @@ algorithmSelect.addEventListener("change", () => {
 });
 
 byId("zoom-in").addEventListener("click", () => {
-  mapZoom = Math.min(1.45, mapZoom + 0.1);
-  document.querySelector(".map-art").style.transform = `scale(${mapZoom})`;
+  map.zoomIn();
 });
 byId("zoom-out").addEventListener("click", () => {
-  mapZoom = Math.max(0.8, mapZoom - 0.1);
-  document.querySelector(".map-art").style.transform = `scale(${mapZoom})`;
+  map.zoomOut();
 });
 
 try {
