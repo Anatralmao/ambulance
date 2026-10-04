@@ -28,6 +28,12 @@ const statusText = byId("status-text");
 const historyMenu = byId("history-menu");
 const historyButton = byId("history-toggle");
 const resultsPanel = byId("results-panel");
+
+const closeResultsButton = byId("close-results");
+
+closeResultsButton.addEventListener("click", () => {
+  resultsPanel.hidden = true;
+});
 const resultBody = byId("results-body");
 const map = L.map("hanoi-map", { zoomControl: false }).setView([21.0285, 105.8542], 12);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -116,6 +122,94 @@ function setTheme(theme) {
   byId("theme-toggle").setAttribute("aria-label", `Switch to ${light ? "dark" : "light"} mode`);
   try { localStorage.setItem("ambufind-theme", theme); } catch { /* Theme applies for this page. */ }
 }
+
+// Make a panel draggable using its header as the handle.
+function makeDraggable(panel, handle) {
+  let dragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  handle.addEventListener("pointerdown", (event) => {
+    // Only start dragging with the primary mouse button.
+    if (event.button !== 0) return;
+
+    // Don't start dragging when clicking a button.
+    if (event.target.closest("button")) return;
+
+    const panelRect = panel.getBoundingClientRect();
+    const shellRect = document
+      .querySelector(".app-shell")
+      .getBoundingClientRect();
+
+    // Convert the panel's position to top/left coordinates.
+    panel.style.left = `${panelRect.left - shellRect.left}px`;
+    panel.style.top = `${panelRect.top - shellRect.top}px`;
+    panel.style.right = "auto";
+    panel.style.bottom = "auto";
+
+    offsetX = event.clientX - panelRect.left;
+    offsetY = event.clientY - panelRect.top;
+
+    dragging = true;
+    panel.classList.add("is-dragging");
+
+    handle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  handle.addEventListener("pointermove", (event) => {
+    if (!dragging) return;
+
+    const shellRect = document
+      .querySelector(".app-shell")
+      .getBoundingClientRect();
+
+    const panelRect = panel.getBoundingClientRect();
+
+    // Keep the entire panel inside the application viewport.
+    const maxX = shellRect.width - panelRect.width;
+    const maxY = shellRect.height - panelRect.height;
+
+    const x = Math.max(
+      0,
+      Math.min(
+        event.clientX - shellRect.left - offsetX,
+        maxX
+      )
+    );
+
+    const y = Math.max(
+      0,
+      Math.min(
+        event.clientY - shellRect.top - offsetY,
+        maxY
+      )
+    );
+
+    panel.style.left = `${x}px`;
+    panel.style.top = `${y}px`;
+  });
+
+  function stopDragging() {
+    dragging = false;
+    panel.classList.remove("is-dragging");
+  }
+
+  handle.addEventListener("pointerup", stopDragging);
+  handle.addEventListener("pointercancel", stopDragging);
+  handle.addEventListener("lostpointercapture", stopDragging);
+}
+
+// Enable dragging for both windows.
+makeDraggable(
+  document.querySelector(".control-panel"),
+  document.querySelector(".panel-heading")
+);
+
+makeDraggable(
+  document.querySelector(".results-panel"),
+  document.querySelector(".results-head")
+);
 
 async function findRoute() {
   if (!testCaseSelect.value || !algorithmSelect.value) {

@@ -23,8 +23,6 @@
       </section>
 
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Ambufind home"><span class="brand-mark">A</span><span>AMBU<span class="brand-accent">FIND</span><small>EMERGENCY ROUTE SYSTEM</small></span></a>
-        <div class="system-state"><span class="live-dot"></span> SYSTEM READY <span class="state-divider"></span> CITY GRID / 01</div>
         <button class="icon-button theme-button" id="theme-toggle" type="button" title="Toggle color theme" aria-label="Switch to light mode">&#9788;</button>
       </header>
 
@@ -63,7 +61,24 @@
       <div class="map-legend"><span class="legend-line"></span> OPTIMIZED ROUTE <span class="legend-dot"></span> NETWORK NODE</div>
 
       <section class="results-panel" id="results-panel" aria-label="Route results" hidden>
-        <div class="results-head"><div><span class="eyebrow">ROUTE ANALYSIS</span><h2>Recommended paths</h2></div><span class="result-tag">SIMULATED</span></div>
+        
+        <div class="results-head">
+          <div>
+            <span class="eyebrow">ROUTE ANALYSIS</span>
+            <h2>Recommended paths</h2>
+          </div>
+
+          <div class="results-head-actions">
+            <span class="result-tag">SIMULATED</span>
+            <button
+              class="close-results"
+              id="close-results"
+              type="button"
+              aria-label="Close route results"
+              title="Close results"
+            >&times;</button>
+          </div>
+        </div>
         <div class="table-wrap"><table><thead><tr><th>#</th><th>TIME</th><th>GRAPH</th><th>ROAD</th><th>VIA</th><th>TOTAL</th></tr></thead><tbody id="results-body"></tbody></table></div>
       </section>
 
