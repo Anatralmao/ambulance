@@ -50,16 +50,183 @@ const demoRoute = [
   [21.0069, 105.8434],
 ];
 let routeLayer;
+
 const routeMarkers = [
   { point: demoRoute[0], label: "DISPATCH", color: "#26845f" },
-  { point: demoRoute[demoRoute.length - 1], label: "HOSPITAL", color: "#d84942" },
+  {
+    point: demoRoute[demoRoute.length - 1],
+    label: "HOSPITAL",
+    color: "#d84942"
+  },
 ];
+
+const checkpointLayers = [];
+
 routeMarkers.forEach(({ point, label, color }) => {
-  L.circleMarker(point, { radius: 8, color: "#ffffff", weight: 2, fillColor: color, fillOpacity: 1 })
-    .bindTooltip(label, { permanent: true, direction: "top", offset: [0, -8], className: "route-label" })
-    .addTo(map);
+  const marker = L.circleMarker(point, {
+    radius: 10,
+    color: "#000000",
+    weight: 2,
+    fillColor: color,
+    fillOpacity: 1,
+
+    // Allow this marker to receive mouse/touch interactions.
+    interactive: true
+  }).addTo(map);
+
+  marker
+    .bindTooltip(label, {
+      permanent: true,
+      direction: "top",
+      offset: [0, -8],
+      className: "route-label"
+    })
+    .openTooltip();
+
+  // Make the checkpoint movable.
+  marker.on("mousedown", startMarkerDrag);
+  marker.on("touchstart", startMarkerDrag);
+
+  checkpointLayers.push(marker);
 });
+
+// Drag handling for Leaflet circle markers.
+let activeMarker = null;
+
+function startMarkerDrag(event) {
+  activeMarker = event.target;
+
+  map.dragging.disable();
+
+  map.on("mousemove", moveMarker);
+  map.on("touchmove", moveMarker);
+
+  map.once("mouseup", stopMarkerDrag);
+  map.once("touchend", stopMarkerDrag);
+}
+
+function moveMarker(event) {
+  if (!activeMarker) return;
+
+  const position = event.latlng;
+
+  if (position) {
+    activeMarker.setLatLng(position);
+  }
+}
+
+function stopMarkerDrag() {
+  if (activeMarker) {
+    try {
+      const droppedPosition = activeMarker.getLatLng();
+      const nearestNode = findNearestNode(droppedPosition);
+
+      // Snap to the exact coordinates of the graph node.
+      activeMarker.setLatLng([
+        nearestNode.lat,
+        nearestNode.lon
+      ]);
+
+      // Keep the graph node ID for routing.
+      activeMarker.options.graphNodeId = nearestNode.id;
+
+      console.log("Snapped to node:", nearestNode.id);
+      console.log(
+        "Distance from drop point:",
+        nearestNode.distanceMeters.toFixed(1),
+        "metres"
+      );
+    } catch (error) {
+      console.error("Could not snap marker:", error);
+    }
+  }
+
+  activeMarker = null;
+
+  map.dragging.enable();
+  map.off("mousemove", moveMarker);
+  map.off("touchmove", moveMarker);
+}
 let sessions = loadSessions();
+
+
+let graphNodes = [];
+
+async function loadGraphNodes() {
+  const response = await fetch("D:\Data\AI tim duong\ambulance\static\data\hanoi_map.json");
+
+  if (!response.ok) {
+    throw new Error("Failed to load OSM graph JSON");
+  }
+
+  const graphData = await response.json();
+
+  graphNodes = graphData.nodes.map(node => ({
+    id: node.id,
+    lat: node.lat,
+    lon: node.lon
+  }));
+
+  if (graphNodes.length === 0) {
+    throw new Error("The graph contains no nodes");
+  }
+
+  console.log(`Loaded ${graphNodes.length} graph nodes`);
+}
+
+loadGraphNodes().catch(console.error);
+
+function findNearestNode(position) {
+  if (graphNodes.length === 0) {
+    throw new Error("Graph nodes have not loaded");
+  }
+
+  const R = 6371000; // Earth's radius in metres
+
+  function distanceMeters(lat1, lon1, lat2, lon2) {
+    const toRad = degrees => degrees * Math.PI / 180;
+
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  let nearest = null;
+  let minDistance = Infinity;
+
+  for (const node of graphNodes) {
+    const distance = distanceMeters(
+      position.lat,
+      position.lng,
+      node.lat,
+      node.lon
+    );
+
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = node;
+    }
+  }
+
+  return {
+    ...nearest,
+    distanceMeters: minDistance
+  };
+}
+
+
+
+
+
+
+
 
 function loadSessions() {
   try {
@@ -206,6 +373,12 @@ makeDraggable(
   document.querySelector(".panel-heading")
 );
 
+
+makeDraggable(
+  historyMenu,
+  document.querySelector(".history-window-head")
+);
+
 makeDraggable(
   document.querySelector(".results-panel"),
   document.querySelector(".results-head")
@@ -223,6 +396,13 @@ async function findRoute() {
   setStatus("running", "COMPUTING DEMONSTRATION ROUTE");
   historyMenu.hidden = true;
   historyButton.setAttribute("aria-expanded", "false");
+  
+  const closeHistoryButton = byId("close-history");
+
+  closeHistoryButton.addEventListener("click", () => {
+    historyMenu.hidden = true;
+    historyButton.setAttribute("aria-expanded", "false");
+  });
   resultsPanel.hidden = true;
   if (routeLayer) map.removeLayer(routeLayer);
   routeLayer = L.polyline(demoRoute, { color: "#e34b45", weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round" }).addTo(map);
@@ -251,12 +431,6 @@ historyButton.addEventListener("click", () => {
   historyButton.setAttribute("aria-expanded", String(open));
 });
 
-document.addEventListener("click", (event) => {
-  if (!historyMenu.hidden && !historyMenu.contains(event.target) && !historyButton.contains(event.target)) {
-    historyMenu.hidden = true;
-    historyButton.setAttribute("aria-expanded", "false");
-  }
-});
 
 byId("theme-toggle").addEventListener("click", () => {
   setTheme(document.body.dataset.theme === "dark" ? "light" : "dark");
@@ -283,3 +457,6 @@ try {
   setTheme("dark");
 }
 renderHistory();
+
+
+

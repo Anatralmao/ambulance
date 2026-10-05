@@ -70,7 +70,71 @@ body[data-theme='light'] {
 .history-count, .history-title span { margin-left: auto; padding: 4.2px 9.8px; border: 1px solid rgba(227, 75, 69, .28); border-radius: 28px; color: #f07970; background: rgba(227, 75, 69, .10); font: 14px 'DM Mono', monospace; }
 .chevron { color: var(--faint); font-size: 21px; transition: transform .18s ease; }
 .history-trigger[aria-expanded='true'] .chevron { transform: rotate(180deg); }
-.history-menu { position: absolute; z-index: 7; top: calc(100% - 67.2px); left: calc(100% + 16.8px); width: min(462px, calc(100vw - 546px)); max-height: 434px; overflow: auto; border: 1px solid var(--border); border-radius: 9.8px; background: var(--panel-solid); box-shadow: var(--shadow); animation: panel-in .18s ease both; }
+
+/* Independent, floating session history window */
+.history-menu {
+  position: absolute;
+  z-index: 8;
+  top: 120px;
+  left: 390px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: 65vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.history-window-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-solid);
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.history-window-head:active {
+  cursor: grabbing;
+}
+
+.history-window-head h2 {
+  margin: 5px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.history-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.history-window-actions button {
+  cursor: pointer;
+}
+
+.history-menu.is-dragging {
+  transition: none;
+  z-index: 10;
+}
+
+/* Keep the existing session entries readable */
+.history-menu .history-title {
+  position: static;
+}
 .history-title { position: sticky; top: 0; display: flex; align-items: center; padding: 15.4px 18.2px; border-bottom: 1px solid var(--border); color: var(--faint); background: var(--panel-solid); font: 14px 'DM Mono', monospace; letter-spacing: 1px; }
 .history-title span { margin-left: auto; }
 .history-entry { display: flex; gap: 15.4px; align-items: center; padding: 15.4px 18.2px; border-bottom: 1px solid var(--border); }
