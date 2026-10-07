@@ -151,30 +151,114 @@ let sessions = loadSessions();
 
 
 let graphNodes = [];
+let graphData = null;
+let roadNetworkLayer = null;
+
+/**
+ * A single canvas-backed Leaflet layer for the OSM road graph.  The source
+ * file is large, so creating one Leaflet object per road would make the page
+ * unusable.  This layer keeps the graph in memory and paints only roads that
+ * intersect the current viewport.
+ */
+const RoadNetworkLayer = L.Layer.extend({
+  initialize(data, options = {}) {
+    this.data = data;
+    L.setOptions(this, options);
+    this.nodeLookup = new Map(
+      data.nodes.map((node) => [node.id, [node.lat, node.lng]])
+    );
+  },
+
+  onAdd(leafletMap) {
+    this.map = leafletMap;
+    this.canvas = L.DomUtil.create("canvas", "road-network-canvas");
+    this.canvas.style.position = "absolute";
+    this.canvas.style.pointerEvents = "none";
+    leafletMap.getPanes().overlayPane.appendChild(this.canvas);
+    leafletMap.on("moveend zoomend resize", this.redraw, this);
+    this.redraw();
+  },
+
+  onRemove(leafletMap) {
+    leafletMap.off("moveend zoomend resize", this.redraw, this);
+    this.canvas.remove();
+    this.canvas = null;
+    this.map = null;
+  },
+
+  redraw() {
+    if (!this.map || !this.canvas) return;
+
+    const size = this.map.getSize();
+    const topLeft = this.map.containerPointToLayerPoint([0, 0]);
+    const ratio = window.devicePixelRatio || 1;
+    const context = this.canvas.getContext("2d");
+
+    L.DomUtil.setPosition(this.canvas, topLeft);
+    this.canvas.width = Math.round(size.x * ratio);
+    this.canvas.height = Math.round(size.y * ratio);
+    this.canvas.style.width = `${size.x}px`;
+    this.canvas.style.height = `${size.y}px`;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.clearRect(0, 0, size.x, size.y);
+    context.strokeStyle = this.options.color || "#4bb8c4";
+    context.globalAlpha = this.options.opacity || 0.38;
+    context.lineWidth = this.options.weight || 1;
+    context.beginPath();
+
+    const paddedBounds = this.map.getBounds().pad(0.12);
+    for (const road of this.data.roads) {
+      const source = this.nodeLookup.get(road.from);
+      const destination = this.nodeLookup.get(road.to);
+      if (!source || !destination) continue;
+      if (!paddedBounds.contains(source) && !paddedBounds.contains(destination)) continue;
+
+      const from = this.map.latLngToContainerPoint(source);
+      const to = this.map.latLngToContainerPoint(destination);
+      context.moveTo(from.x, from.y);
+      context.lineTo(to.x, to.y);
+    }
+
+    context.stroke();
+  }
+});
 
 async function loadGraphNodes() {
-  const response = await fetch("D:\Data\AI tim duong\ambulance\static\data\hanoi_map.json");
+  setStatus("running", "LOADING HANOI ROAD NETWORK");
+  const response = await fetch("/static/data/hanoi_map.json");
 
   if (!response.ok) {
     throw new Error("Failed to load OSM graph JSON");
   }
 
-  const graphData = await response.json();
+  graphData = await response.json();
 
   graphNodes = graphData.nodes.map(node => ({
     id: node.id,
     lat: node.lat,
-    lon: node.lon
+    lon: node.lng
   }));
 
   if (graphNodes.length === 0) {
     throw new Error("The graph contains no nodes");
   }
 
-  console.log(`Loaded ${graphNodes.length} graph nodes`);
+  roadNetworkLayer = new RoadNetworkLayer(graphData, {
+    color: "#4bb8c4",
+    opacity: 0.42,
+    weight: 1
+  }).addTo(map);
+
+  console.log(
+    `Loaded ${graphNodes.length} graph nodes and ${graphData.roads.length} roads`
+  );
+  setStatus("", "HANOI ROAD NETWORK READY");
 }
 
-loadGraphNodes().catch(console.error);
+loadGraphNodes().catch((error) => {
+  console.error(error);
+  setStatus("error", "COULD NOT LOAD HANOI ROAD NETWORK");
+});
 
 function findNearestNode(position) {
   if (graphNodes.length === 0) {
