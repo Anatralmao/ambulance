@@ -37,25 +37,6 @@
           <option value="astar">A* Search</option>
           <option value="dijkstra">Dijkstra's Algorithm</option>
         </select>
-        <section class="position-tracker" aria-label="Marker positions">
-          <article class="position-card">
-            <h2><span class="position-dot dispatch-dot"></span>Dispatch</h2>
-            <dl>
-              <dt>Node ID</dt><dd id="dispatch-node">Waiting for network</dd>
-              <dt>Latitude (vĩ độ)</dt><dd id="dispatch-lat">—</dd>
-              <dt>Longitude (kinh độ)</dt><dd id="dispatch-lng">—</dd>
-            </dl>
-          </article>
-          <article class="position-card">
-            <h2><span class="position-dot hospital-dot"></span>Hospital</h2>
-            <dl>
-              <dt>Node ID</dt><dd id="hospital-node">Waiting for network</dd>
-              <dt>Latitude (vĩ độ)</dt><dd id="hospital-lat">—</dd>
-              <dt>Longitude (kinh độ)</dt><dd id="hospital-lng">—</dd>
-            </dl>
-          </article>
-          <p>Coordinates update while dragging. Node ID updates after release.</p>
-        </section>
         <button class="history-trigger" id="history-toggle" type="button" aria-expanded="false" aria-controls="history-menu">
           <span class="history-icon" aria-hidden="true">&#9719;</span><span>Session recordings</span><span class="history-count" id="history-count">0</span><span class="chevron" aria-hidden="true">&#8964;</span>
         </button>
@@ -93,7 +74,17 @@
 
 
       <div class="map-legend"><span class="legend-line"></span> OPTIMIZED ROUTE <span class="legend-dot"></span> NETWORK NODE</div>
+      <div class="coordinate-bars">
+        <div class="coordinate-bar dispatch-coordinate">
+          <span class="coordinate-dot"></span>
+          <span id="dispatch-address-bar">—</span>
+        </div>
 
+        <div class="coordinate-bar hospital-coordinate">
+          <span class="coordinate-dot"></span>
+          <span id="hospital-address-bar">—</span>
+        </div>
+      </div>
       <section class="results-panel" id="results-panel" aria-label="Route results" hidden>
         
         <div class="results-head">

@@ -26,10 +26,10 @@ const initialPoints = [[21.0435, 105.8231], [21.0069, 105.8434]];
 let routeLayer;
 
 const routeMarkers = [
-  { point: initialPoints[0], label: "DISPATCH", color: "#26845f" },
+  { point: initialPoints[0], label: "START", color: "#26845f" },
   {
     point: initialPoints[initialPoints.length - 1],
-    label: "HOSPITAL",
+    label: "END",
     color: "#d84942"
   },
 ];
@@ -69,11 +69,28 @@ routeMarkers.forEach(({ point, label, color }, index) => {
 function renderMarkerPosition(marker, nodeStatus) {
   const key = marker.options.positionKey;
   const point = marker.getLatLng();
-  byId(`${key}-lat`).textContent = point.lat.toFixed(7);
-  byId(`${key}-lng`).textContent = point.lng.toFixed(7);
-  byId(`${key}-node`).textContent = marker.options.graphNodeId || nodeStatus || "Not snapped";
+  const lat = point.lat.toFixed(7);
+  const lng = point.lng.toFixed(7);
+
+  const latBar = byId(`${key}-lat-bar`);
+  const lngBar = byId(`${key}-lng-bar`);
+
+  if (latBar) latBar.textContent = lat;
+  if (lngBar) lngBar.textContent = lng;
 }
 
+async function updateAddressBar(key, lat, lng) {
+  try {
+    const data = await apiJson(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=vi`
+    );
+
+    byId(`${key}-address-bar`).textContent =
+      data.display_name || "Address unavailable";
+  } catch {
+    byId(`${key}-address-bar`).textContent = "Address unavailable";
+  }
+}
 // Drag handling for Leaflet circle markers.
 let activeMarker = null;
 
@@ -150,6 +167,11 @@ async function snapMarker(marker) {
     marker.setLatLng([nearest.lat, nearest.lng]);
     marker.options.graphNodeId = nearest.id;
     renderMarkerPosition(marker);
+    updateAddressBar(
+      marker.options.positionKey,
+      nearest.lat,
+      nearest.lng
+    );    
   } catch (error) {
     if (marker.snapVersion === version) {
       renderMarkerPosition(marker, "Node unavailable — move to retry");
