@@ -28,31 +28,39 @@
 
       <aside class="control-panel" aria-label="Route controls">
         <div class="panel-heading"><div><span class="eyebrow">DISPATCH CONSOLE</span><h1>Route planner</h1></div><span class="panel-index">01 / 03</span></div>
-        <label class="field-label" for="test-case">TEST SCENARIO</label>
+        <label class="field-label" for="test-case">ROUTE SELECTION</label>
         <select id="test-case" class="select-control">
-          <option value="">Select a test case</option>
-          <option>TC-01: Hospital A to Hospital B</option>
-          <option>TC-02: Station 3 to Emergency Zone 7</option>
-          <option>TC-03: Downtown HQ to Airport Triage</option>
-          <option>TC-04: North Grid to South Grid</option>
-          <option>TC-05: Rush Hour Cross-City</option>
-          <option>TC-06: Night Shift Route Check</option>
+          <option>Custom marker route</option>
         </select>
         <label class="field-label" for="algorithm">ROUTING ALGORITHM</label>
         <select id="algorithm" class="select-control">
-          <option value="">Select an algorithm</option>
-          <option>Dijkstra's Algorithm</option>
-          <option>A* Search</option>
-          <option>Bellman-Ford</option>
-          <option>BFS (Breadth-First)</option>
-          <option>DFS (Depth-First)</option>
-          <option>Floyd-Warshall</option>
+          <option value="astar">A* Search</option>
+          <option value="dijkstra">Dijkstra's Algorithm</option>
         </select>
+        <section class="position-tracker" aria-label="Marker positions">
+          <article class="position-card">
+            <h2><span class="position-dot dispatch-dot"></span>Dispatch</h2>
+            <dl>
+              <dt>Node ID</dt><dd id="dispatch-node">Waiting for network</dd>
+              <dt>Latitude (vĩ độ)</dt><dd id="dispatch-lat">—</dd>
+              <dt>Longitude (kinh độ)</dt><dd id="dispatch-lng">—</dd>
+            </dl>
+          </article>
+          <article class="position-card">
+            <h2><span class="position-dot hospital-dot"></span>Hospital</h2>
+            <dl>
+              <dt>Node ID</dt><dd id="hospital-node">Waiting for network</dd>
+              <dt>Latitude (vĩ độ)</dt><dd id="hospital-lat">—</dd>
+              <dt>Longitude (kinh độ)</dt><dd id="hospital-lng">—</dd>
+            </dl>
+          </article>
+          <p>Coordinates update while dragging. Node ID updates after release.</p>
+        </section>
         <button class="history-trigger" id="history-toggle" type="button" aria-expanded="false" aria-controls="history-menu">
           <span class="history-icon" aria-hidden="true">&#9719;</span><span>Session recordings</span><span class="history-count" id="history-count">0</span><span class="chevron" aria-hidden="true">&#8964;</span>
         </button>
         
-        <div class="panel-foot"><span class="foot-marker"></span> ROUTE OUTPUT <span class="foot-value">SIMULATION MODE</span></div>
+        <div class="panel-foot"><span class="foot-marker"></span> ROUTE OUTPUT <span class="foot-value">ROAD NETWORK</span></div>
       </aside>
       
       <section
@@ -91,11 +99,11 @@
         <div class="results-head">
           <div>
             <span class="eyebrow">ROUTE ANALYSIS</span>
-            <h2>Recommended paths</h2>
+            <h2>Computed route</h2>
           </div>
 
           <div class="results-head-actions">
-            <span class="result-tag">SIMULATED</span>
+            <span class="result-tag">COMPUTED</span>
             <button
               class="close-results"
               id="close-results"
@@ -105,13 +113,13 @@
             >&times;</button>
           </div>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>#</th><th>TIME</th><th>GRAPH</th><th>ROAD</th><th>VIA</th><th>TOTAL</th></tr></thead><tbody id="results-body"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>DISTANCE</th><th>ALGORITHM</th><th>POINTS</th></tr></thead><tbody id="results-body"></tbody></table></div>
       </section>
 
       <div class="route-action">
         <div class="route-status" id="route-status" role="status" aria-live="polite"><span class="status-dot"></span><span id="status-text">SELECT A SCENARIO TO BEGIN</span></div>
         <button class="find-button" id="find-route" type="button"><span class="button-icon" aria-hidden="true">&#10148;</span><span id="button-text">Find route</span><span class="button-arrow" aria-hidden="true">&#8599;</span></button>
-        <p>Route estimates are for interface demonstration only</p>
+        <p>Drag both markers to choose the start and destination. Travel time is unavailable.</p>
       </div>
     </main>
   </body>

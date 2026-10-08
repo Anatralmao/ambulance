@@ -1,18 +1,3 @@
-const cases = [
-  "TC-01: Hospital A to Hospital B",
-  "TC-02: Station 3 to Emergency Zone 7",
-  "TC-03: Downtown HQ to Airport Triage",
-  "TC-04: North Grid to South Grid",
-  "TC-05: Rush Hour Cross-City",
-  "TC-06: Night Shift Route Check",
-];
-
-const demoResults = [
-  { time: "4m 22s", graph: "3.14 km", road: "3.88 km", via: "Sudirman Ave. / Semanggi" , total: "8.32 km" },
-  { time: "5m 07s", graph: "3.60 km", road: "4.21 km", via: "Gatot Subroto Rd. / Halim", total: "9.41 km" },
-  { time: "6m 51s", graph: "4.85 km", road: "5.30 km", via: "Rasuna Said Rd. / Kuningan", total: "11.75 km" },
-];
-
 let sessions = loadSessions();
 
 const byId = (id) => document.getElementById(id);
@@ -37,20 +22,13 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap contributors",
 }).addTo(map);
 
-const demoRoute = [
-  [21.0435, 105.8231],
-  [21.0381, 105.8314],
-  [21.0322, 105.8406],
-  [21.0285, 105.8542],
-  [21.0201, 105.8581],
-  [21.0069, 105.8434],
-];
+const initialPoints = [[21.0435, 105.8231], [21.0069, 105.8434]];
 let routeLayer;
 
 const routeMarkers = [
-  { point: demoRoute[0], label: "DISPATCH", color: "#26845f" },
+  { point: initialPoints[0], label: "DISPATCH", color: "#26845f" },
   {
-    point: demoRoute[demoRoute.length - 1],
+    point: initialPoints[initialPoints.length - 1],
     label: "HOSPITAL",
     color: "#d84942"
   },
@@ -58,8 +36,9 @@ const routeMarkers = [
 
 const checkpointLayers = [];
 
-routeMarkers.forEach(({ point, label, color }) => {
+routeMarkers.forEach(({ point, label, color }, index) => {
   const marker = L.circleMarker(point, {
+    positionKey: index === 0 ? "dispatch" : "hospital",
     radius: 10,
     color: "#000000",
     weight: 2,
@@ -84,13 +63,28 @@ routeMarkers.forEach(({ point, label, color }) => {
   marker.on("touchstart", startMarkerDrag);
 
   checkpointLayers.push(marker);
+  renderMarkerPosition(marker, "Waiting for network");
 });
+
+function renderMarkerPosition(marker, nodeStatus) {
+  const key = marker.options.positionKey;
+  const point = marker.getLatLng();
+  byId(`${key}-lat`).textContent = point.lat.toFixed(7);
+  byId(`${key}-lng`).textContent = point.lng.toFixed(7);
+  byId(`${key}-node`).textContent = marker.options.graphNodeId || nodeStatus || "Not snapped";
+}
 
 // Drag handling for Leaflet circle markers.
 let activeMarker = null;
 
 function startMarkerDrag(event) {
+  if (routingBusy) return;
   activeMarker = event.target;
+  activeMarker.snapVersion = (activeMarker.snapVersion || 0) + 1;
+  delete activeMarker.options.graphNodeId;
+  renderMarkerPosition(activeMarker, "Dragging — release to snap");
+  if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+  resultsPanel.hidden = true;
 
   map.dragging.disable();
 
@@ -108,205 +102,87 @@ function moveMarker(event) {
 
   if (position) {
     activeMarker.setLatLng(position);
+    renderMarkerPosition(activeMarker, "Dragging — release to snap");
   }
 }
 
-function stopMarkerDrag() {
-  if (activeMarker) {
-    try {
-      const droppedPosition = activeMarker.getLatLng();
-      const nearestNode = findNearestNode(droppedPosition);
+let networkReady = false;
+let routingBusy = false;
+let pendingSnaps = 0;
+findButton.disabled = true;
 
-      // Snap to the exact coordinates of the graph node.
-      activeMarker.setLatLng([
-        nearestNode.lat,
-        nearestNode.lon
-      ]);
+function updateFindButton() {
+  findButton.disabled = !networkReady || routingBusy || pendingSnaps > 0;
+}
 
-      // Keep the graph node ID for routing.
-      activeMarker.options.graphNodeId = nearestNode.id;
+async function apiJson(url, options) {
+  const response = await fetch(url, options);
+  const data = await response.json();
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Invalid request");
+  return data;
+}
 
-      console.log("Snapped to node:", nearestNode.id);
-      console.log(
-        "Distance from drop point:",
-        nearestNode.distanceMeters.toFixed(1),
-        "metres"
-      );
-    } catch (error) {
-      console.error("Could not snap marker:", error);
-    }
-  }
-
+async function stopMarkerDrag() {
+  const marker = activeMarker;
   activeMarker = null;
-
   map.dragging.enable();
   map.off("mousemove", moveMarker);
   map.off("touchmove", moveMarker);
+  if (!marker) return;
+  if (!networkReady) {
+    renderMarkerPosition(marker, "Waiting for network");
+    return;
+  }
+  await snapMarker(marker);
 }
-let sessions = loadSessions();
 
-
-let graphNodes = [];
-let graphData = null;
-let roadNetworkLayer = null;
-
-/**
- * A single canvas-backed Leaflet layer for the OSM road graph.  The source
- * file is large, so creating one Leaflet object per road would make the page
- * unusable.  This layer keeps the graph in memory and paints only roads that
- * intersect the current viewport.
- */
-const RoadNetworkLayer = L.Layer.extend({
-  initialize(data, options = {}) {
-    this.data = data;
-    L.setOptions(this, options);
-    this.nodeLookup = new Map(
-      data.nodes.map((node) => [node.id, [node.lat, node.lng]])
-    );
-  },
-
-  onAdd(leafletMap) {
-    this.map = leafletMap;
-    this.canvas = L.DomUtil.create("canvas", "road-network-canvas");
-    this.canvas.style.position = "absolute";
-    this.canvas.style.pointerEvents = "none";
-    leafletMap.getPanes().overlayPane.appendChild(this.canvas);
-    leafletMap.on("moveend zoomend resize", this.redraw, this);
-    this.redraw();
-  },
-
-  onRemove(leafletMap) {
-    leafletMap.off("moveend zoomend resize", this.redraw, this);
-    this.canvas.remove();
-    this.canvas = null;
-    this.map = null;
-  },
-
-  redraw() {
-    if (!this.map || !this.canvas) return;
-
-    const size = this.map.getSize();
-    const topLeft = this.map.containerPointToLayerPoint([0, 0]);
-    const ratio = window.devicePixelRatio || 1;
-    const context = this.canvas.getContext("2d");
-
-    L.DomUtil.setPosition(this.canvas, topLeft);
-    this.canvas.width = Math.round(size.x * ratio);
-    this.canvas.height = Math.round(size.y * ratio);
-    this.canvas.style.width = `${size.x}px`;
-    this.canvas.style.height = `${size.y}px`;
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context.clearRect(0, 0, size.x, size.y);
-    context.strokeStyle = this.options.color || "#4bb8c4";
-    context.globalAlpha = this.options.opacity || 0.38;
-    context.lineWidth = this.options.weight || 1;
-    context.beginPath();
-
-    const paddedBounds = this.map.getBounds().pad(0.12);
-    for (const road of this.data.roads) {
-      const source = this.nodeLookup.get(road.from);
-      const destination = this.nodeLookup.get(road.to);
-      if (!source || !destination) continue;
-      if (!paddedBounds.contains(source) && !paddedBounds.contains(destination)) continue;
-
-      const from = this.map.latLngToContainerPoint(source);
-      const to = this.map.latLngToContainerPoint(destination);
-      context.moveTo(from.x, from.y);
-      context.lineTo(to.x, to.y);
+async function snapMarker(marker) {
+  const version = marker.snapVersion;
+  const position = marker.getLatLng();
+  renderMarkerPosition(marker, "Finding nearest node…");
+  pendingSnaps += 1;
+  updateFindButton();
+  try {
+    const nearest = await apiJson("/api/nearest?" + new URLSearchParams({
+      lat: position.lat, lng: position.lng,
+    }));
+    if (marker.snapVersion !== version) return;
+    marker.setLatLng([nearest.lat, nearest.lng]);
+    marker.options.graphNodeId = nearest.id;
+    renderMarkerPosition(marker);
+  } catch (error) {
+    if (marker.snapVersion === version) {
+      renderMarkerPosition(marker, "Node unavailable — move to retry");
+      setStatus("error", error.message);
     }
-
-    context.stroke();
+  } finally {
+    pendingSnaps -= 1;
+    updateFindButton();
   }
-});
-
-async function loadGraphNodes() {
-  setStatus("running", "LOADING HANOI ROAD NETWORK");
-  const response = await fetch("/static/data/hanoi_map.json");
-
-  if (!response.ok) {
-    throw new Error("Failed to load OSM graph JSON");
-  }
-
-  graphData = await response.json();
-
-  graphNodes = graphData.nodes.map(node => ({
-    id: node.id,
-    lat: node.lat,
-    lon: node.lng
-  }));
-
-  if (graphNodes.length === 0) {
-    throw new Error("The graph contains no nodes");
-  }
-
-  roadNetworkLayer = new RoadNetworkLayer(graphData, {
-    color: "#4bb8c4",
-    opacity: 0.42,
-    weight: 1
-  }).addTo(map);
-
-  console.log(
-    `Loaded ${graphNodes.length} graph nodes and ${graphData.roads.length} roads`
-  );
-  setStatus("", "HANOI ROAD NETWORK READY");
 }
 
-loadGraphNodes().catch((error) => {
-  console.error(error);
-  setStatus("error", "COULD NOT LOAD HANOI ROAD NETWORK");
-});
-
-function findNearestNode(position) {
-  if (graphNodes.length === 0) {
-    throw new Error("Graph nodes have not loaded");
-  }
-
-  const R = 6371000; // Earth's radius in metres
-
-  function distanceMeters(lat1, lon1, lat2, lon2) {
-    const toRad = degrees => degrees * Math.PI / 180;
-
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) ** 2;
-
-    return 2 * R * Math.asin(Math.sqrt(a));
-  }
-
-  let nearest = null;
-  let minDistance = Infinity;
-
-  for (const node of graphNodes) {
-    const distance = distanceMeters(
-      position.lat,
-      position.lng,
-      node.lat,
-      node.lon
-    );
-
-    if (distance < minDistance) {
-      minDistance = distance;
-      nearest = node;
+async function checkNetwork() {
+  try {
+    const data = await apiJson("/api/network/status");
+    networkReady = data.status === "ready";
+    updateFindButton();
+    if (networkReady) {
+      setStatus("", "READY — DRAG MARKERS TO CHOOSE YOUR ROUTE");
+      await Promise.all(checkpointLayers.filter(marker => marker !== activeMarker).map(snapMarker));
+      return;
     }
+    if (data.status === "error") {
+      setStatus("error", "ROAD NETWORK COULD NOT BE LOADED");
+      checkpointLayers.forEach(marker => renderMarkerPosition(marker, "Network unavailable"));
+      return;
+    }
+    setStatus("running", "PREPARING ROUTING — MAP IS READY TO EXPLORE");
+  } catch (error) {
+    setStatus("error", "CONNECTING TO ROUTING SERVER...");
   }
-
-  return {
-    ...nearest,
-    distanceMeters: minDistance
-  };
+  window.setTimeout(checkNetwork, 2000);
 }
-
-
-
-
-
-
-
+checkNetwork();
 
 function loadSessions() {
   try {
@@ -354,9 +230,9 @@ function escapeHtml(value) {
   })[char]);
 }
 
-function renderResults() {
-  resultBody.innerHTML = demoResults.map((route, index) => `
-    <tr><td>${index + 1}</td><td>${route.time}</td><td>${route.graph}</td><td>${route.road}</td><td title="${route.via}">${route.via}</td><td>${route.total}</td></tr>`).join("");
+function renderResults(route) {
+  const distance = route.distance_km.toFixed(2) + " km";
+  resultBody.innerHTML = `<tr><td>1</td><td>${distance}</td><td>${escapeHtml(algorithmSelect.selectedOptions[0].textContent)}</td><td>${route.coordinates.length}</td></tr>`;
   resultsPanel.hidden = false;
 }
 
@@ -468,45 +344,58 @@ makeDraggable(
 );
 
 async function findRoute() {
-  if (!testCaseSelect.value || !algorithmSelect.value) {
-    setStatus("error", "SELECT A TEST CASE AND ALGORITHM");
-    (!testCaseSelect.value ? testCaseSelect : algorithmSelect).focus();
-    return;
-  }
-
-  findButton.disabled = true;
+  if (!networkReady || routingBusy || pendingSnaps || activeMarker) return;
+  routingBusy = true;
+  updateFindButton();
   byId("button-text").textContent = "Computing route...";
-  setStatus("running", "COMPUTING DEMONSTRATION ROUTE");
+  setStatus("running", "COMPUTING ROUTE");
   historyMenu.hidden = true;
   historyButton.setAttribute("aria-expanded", "false");
-  
-  const closeHistoryButton = byId("close-history");
-
-  closeHistoryButton.addEventListener("click", () => {
-    historyMenu.hidden = true;
-    historyButton.setAttribute("aria-expanded", "false");
-  });
   resultsPanel.hidden = true;
-  if (routeLayer) map.removeLayer(routeLayer);
-  routeLayer = L.polyline(demoRoute, { color: "#e34b45", weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round" }).addTo(map);
-  map.fitBounds(routeLayer.getBounds(), { padding: [90, 90], maxZoom: 14 });
-
-  await new Promise((resolve) => window.setTimeout(resolve, 1100));
-
-  renderResults();
-  sessions.push({
-    testCase: testCaseSelect.value,
-    algorithm: algorithmSelect.value,
-    timestamp: new Date().toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }),
-    routes: demoResults.length,
-  });
-  sessions = sessions.slice(-30);
-  saveSessions();
-  renderHistory();
-  setStatus("complete", "DEMONSTRATION ROUTE READY");
-  byId("button-text").textContent = "Find route";
-  findButton.disabled = false;
+  if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+  try {
+    const [start, goal] = checkpointLayers.map(marker => {
+      const point = marker.getLatLng();
+      return { lat: point.lat, lng: point.lng };
+    });
+    const result = await apiJson("/api/route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start, goal, algorithm: algorithmSelect.value }),
+    });
+    checkpointLayers[0].setLatLng([result.start.lat, result.start.lng]);
+    checkpointLayers[1].setLatLng([result.goal.lat, result.goal.lng]);
+    checkpointLayers[0].options.graphNodeId = result.start.id;
+    checkpointLayers[1].options.graphNodeId = result.goal.id;
+    checkpointLayers.forEach(marker => renderMarkerPosition(marker));
+    routeLayer = L.polyline(result.coordinates, {
+      color: "#e34b45", weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round",
+    }).addTo(map);
+    map.fitBounds(routeLayer.getBounds(), { padding: [90, 90], maxZoom: 14 });
+    renderResults(result);
+    sessions.push({
+      testCase: testCaseSelect.value || "Custom marker route",
+      algorithm: algorithmSelect.selectedOptions[0].textContent,
+      timestamp: new Date().toLocaleString(),
+      routes: 1,
+    });
+    sessions = sessions.slice(-30);
+    saveSessions();
+    renderHistory();
+    setStatus("complete", "ROUTE READY");
+  } catch (error) {
+    setStatus("error", error.message);
+  } finally {
+    routingBusy = false;
+    byId("button-text").textContent = "Find route";
+    updateFindButton();
+  }
 }
+
+byId("close-history").addEventListener("click", () => {
+  historyMenu.hidden = true;
+  historyButton.setAttribute("aria-expanded", "false");
+});
 
 historyButton.addEventListener("click", () => {
   const open = historyMenu.hidden;
@@ -521,10 +410,10 @@ byId("theme-toggle").addEventListener("click", () => {
 findButton.addEventListener("click", findRoute);
 
 testCaseSelect.addEventListener("change", () => {
-  if (testCaseSelect.value && algorithmSelect.value) setStatus("", "READY TO SIMULATE ROUTE");
+  if (networkReady && !routingBusy) setStatus("", "READY TO FIND ROUTE");
 });
 algorithmSelect.addEventListener("change", () => {
-  if (testCaseSelect.value && algorithmSelect.value) setStatus("", "READY TO SIMULATE ROUTE");
+  if (networkReady && !routingBusy) setStatus("", "READY TO FIND ROUTE");
 });
 
 byId("zoom-in").addEventListener("click", () => {
@@ -540,6 +429,3 @@ try {
   setTheme("dark");
 }
 renderHistory();
-
-
-
