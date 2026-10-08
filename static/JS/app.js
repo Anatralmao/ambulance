@@ -13,11 +13,7 @@ const demoResults = [
   { time: "6m 51s", graph: "4.85 km", road: "5.30 km", via: "Rasuna Said Rd. / Kuningan", total: "11.75 km" },
 ];
 
-const starterSessions = [
-  { testCase: cases[0], algorithm: "Dijkstra's Algorithm", timestamp: "2026-09-30 08:14", routes: 2 },
-  { testCase: cases[2], algorithm: "A* Search", timestamp: "2026-09-30 11:47", routes: 2 },
-  { testCase: cases[4], algorithm: "Bellman-Ford", timestamp: "2026-09-30 14:02", routes: 1 },
-];
+let sessions = loadSessions();
 
 const byId = (id) => document.getElementById(id);
 const testCaseSelect = byId("test-case");
@@ -314,18 +310,21 @@ function findNearestNode(position) {
 
 function loadSessions() {
   try {
-    const saved = localStorage.getItem("ambufind-sessions");
-    return saved ? JSON.parse(saved) : starterSessions;
+    const saved = sessionStorage.getItem("ambufind-sessions");
+    return saved ? JSON.parse(saved) : [];
   } catch {
-    return starterSessions;
+    return [];
   }
 }
 
 function saveSessions() {
   try {
-    localStorage.setItem("ambufind-sessions", JSON.stringify(sessions.slice(-30)));
+    sessionStorage.setItem(
+      "ambufind-sessions",
+      JSON.stringify(sessions.slice(-30))
+    );
   } catch {
-    // The history still works for the current page when storage is unavailable.
+    // Session history still works for the current tab.
   }
 }
 
