@@ -17,3 +17,5 @@ node_modules/
 Thumbs.db
 __pycache__/main.cpython-313.pyc
 /src/api/__pycache__
+__pycache__/main.cpython-313.pyc
+src/api/__pycache__/routes.cpython-313.pyc
