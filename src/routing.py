@@ -15,6 +15,9 @@ from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
 
+DEFAULT_SPEED_KMH = 40.0
+
+
 def sphere_points(coordinates):
     radians = np.radians(coordinates)
     lat, lon = radians[..., 0], radians[..., 1]
@@ -123,7 +126,15 @@ class RoadNetwork:
             "distance_meters": float(2 * 6371000 * np.arcsin(min(1, distance / 2))),
         }
 
-    def route(self, start, goal, algorithm):
+    def route(self, start, goal, algorithm, speed_kmh=DEFAULT_SPEED_KMH):
+        """Find a shortest-distance route and estimate travel time at fixed speed.
+
+        Segment i connects coordinates[i] to coordinates[i + 1]. Distances
+        come from graph edges, not straight lines between their endpoints.
+        No directed route returns None; invalid speed raises ValueError.
+        """
+        if not math.isfinite(speed_kmh) or speed_kmh <= 0:
+            raise ValueError("Speed must be finite and greater than zero (km/h)")
         start_index, start_point = self.nearest(start.lat, start.lng)
         goal_index, goal_point = self.nearest(goal.lat, goal.lng)
         if algorithm == "dijkstra":
@@ -139,9 +150,19 @@ class RoadNetwork:
             current = int(parents[current])
             path.append(current)
         path.reverse()
+        segment_distances = [float(self.graph[source, target])
+                             for source, target in zip(path, path[1:])]
+        segment_durations = [length / speed_kmh * 3600 for length in segment_distances]
+        estimated_time = sum(segment_durations)
+        if not math.isfinite(estimated_time):
+            raise ValueError("Estimated travel time must be finite; increase speed_kmh")
         return {"coordinates": self.coordinates[path].tolist(),
                 "distance_km": distance, "start": start_point,
-                "goal": goal_point, "algorithm": algorithm}
+                "goal": goal_point, "algorithm": algorithm,
+                "speed_kmh": float(speed_kmh),
+                "segment_distances_km": segment_distances,
+                "segment_durations_sec": segment_durations,
+                "estimated_time_sec": estimated_time}
 
     def _astar(self, start, goal):
         target = self.xyz[goal]

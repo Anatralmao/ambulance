@@ -11,7 +11,8 @@ Open http://127.0.0.1:8000. The map can be explored immediately while the
 server prepares routing in the background. Drag the two markers, select
 A* or Dijkstra, then choose **Find route**. Results respect the directed
 edges in the supplied dataset. A missing connection is reported rather
-than replaced by a demonstration route. Travel time is not calculated.
+than replaced by a demonstration route. The routing result includes estimated
+travel time at an assumed fixed speed of 40 km/h (not live traffic).
 
 The browser no longer downloads the full road graph or draws every edge.
 The backend streams [the source graph](static/data/hanoi_map.json), builds
@@ -32,7 +33,9 @@ API endpoints:
 - `GET /api/nearest?lat=21.03&lng=105.85`: nearest node belonging to a road.
 - `POST /api/route`: JSON with `start` and `goal` objects containing `lat`
   and `lng`, plus `algorithm` (`astar` or `dijkstra`). Returns route
-  coordinates, distance, and snapped endpoints. Returns 503 while loading
+  coordinates, distance, snapped endpoints, assumed speed, segment distances
+  and durations, and total ETA in seconds. The current API uses the default
+  speed; configurable request speed is part of N2's integration. Returns 503 while loading
   and 404 when no directed route exists.
 
 Leaflet and OpenStreetMap background tiles still require internet access.
