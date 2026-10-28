@@ -2,6 +2,8 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from tests.test_cases import TEST_CASES
+
 router = APIRouter(prefix="/api")
 
 
@@ -46,13 +48,4 @@ def route(body: RouteRequest, request: Request):
 
 @router.get("/test-cases")
 def get_test_cases():
-    return [
-        {
-            "id": "case_001",
-            "name": "Emergency Case 1"
-        },
-        {
-            "id": "case_002",
-            "name": "Emergency Case 2"
-        }
-    ]
+    return TEST_CASES

@@ -1,5 +1,28 @@
 let sessions = loadSessions();
 
+const FALLBACK_TEST_CASES = {
+  cases: [
+    {
+      case_id: "TC01",
+      description: "Normal route",
+      hospital: { id: 8502010001, name: "Bach Mai Hospital", coords: [21.0058, 105.8501], verified: true },
+      emergency_target: { id: 8502010002, coords: [21.0126, 105.8678] },
+    },
+    {
+      case_id: "TC02",
+      description: "One-way detour",
+      hospital: { id: 8502010008, name: "Vietnam-Germany Hospital", coords: [21.0175, 105.8472], verified: true },
+      emergency_target: { id: 8502010009, coords: [21.0241, 105.8604] },
+    },
+    {
+      case_id: "TC03",
+      description: "Obstacle bypass",
+      hospital: { id: 8502010012, name: "Saint Paul General Hospital", coords: [21.0308, 105.8445], verified: true },
+      emergency_target: { id: 8502010013, coords: [21.0383, 105.8597] },
+    },
+  ],
+};
+
 const byId = (id) => document.getElementById(id);
 const testCaseSelect = byId("test-case");
 const algorithmSelect = byId("algorithm");
@@ -24,6 +47,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 const initialPoints = [[21.0435, 105.8231], [21.0069, 105.8434]];
 let routeLayer;
+let availableTestCases = FALLBACK_TEST_CASES.cases;
 
 const routeMarkers = [
   { point: initialPoints[0], label: "START", color: "#26845f" },
@@ -431,8 +455,93 @@ byId("theme-toggle").addEventListener("click", () => {
 });
 findButton.addEventListener("click", findRoute);
 
+function setMarkerPosition(marker, coords, label) {
+  const [lat, lng] = coords;
+  marker.setLatLng([lat, lng]);
+  if (label) {
+    marker.bindTooltip(label, {
+      permanent: true,
+      direction: "top",
+      offset: [0, -8],
+      className: "route-label"
+    }).openTooltip();
+  }
+  renderMarkerPosition(marker);
+  updateAddressBar(marker.options.positionKey, lat, lng);
+}
+
+function applyTestCaseSelection() {
+  const selected = testCaseSelect.value;
+
+  if (!selected || selected === "custom") return;
+
+  const match = availableTestCases.find(
+    (caseItem) => caseItem.case_id === selected || caseItem.id === selected
+  );
+
+  if (!match) return;
+
+  // START = emergency target
+  // END = hospital
+  const targetCoords = match.emergency_target.coords;
+  const hospitalCoords = match.hospital.coords;
+
+  setMarkerPosition(
+    checkpointLayers[0],
+    targetCoords,
+    `START\nTARGET — ${match.case_id}`
+  );
+
+  setMarkerPosition(
+    checkpointLayers[1],
+    hospitalCoords,
+    `END\n${match.hospital.name || "Hospital"}`
+  );
+
+  if (routeLayer) {
+    map.removeLayer(routeLayer);
+    routeLayer = null;
+  }
+
+  resultsPanel.hidden = true;
+
+  map.fitBounds(
+    L.latLngBounds(targetCoords, hospitalCoords),
+    { padding: [60, 60], maxZoom: 15 }
+  );
+
+  setStatus("", `SCENARIO ${match.case_id} LOADED — READY TO FIND ROUTE`);
+}
+async function loadTestCases() {
+  try {
+    const data = await apiJson("/api/test-cases");
+    if (data && Array.isArray(data.cases)) {
+      availableTestCases = data.cases;
+    } else if (Array.isArray(data)) {
+      availableTestCases = data;
+    }
+  } catch (error) {
+    availableTestCases = FALLBACK_TEST_CASES.cases;
+  }
+
+  testCaseSelect.innerHTML =
+  '<option value="custom">Custom marker route</option>' +
+  availableTestCases.map((caseItem) => {
+    const id = caseItem.case_id || caseItem.id || "case";
+    const label = `${id} - ${caseItem.description || caseItem.name || "Scenario"}`;
+
+    return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
+  }).join("");
+
+  testCaseSelect.value = "custom";
+}
+
 testCaseSelect.addEventListener("change", () => {
-  if (networkReady && !routingBusy) setStatus("", "READY TO FIND ROUTE");
+  if (testCaseSelect.value === "custom") {
+    if (networkReady && !routingBusy) setStatus("", "READY TO FIND ROUTE");
+    return;
+  }
+  applyTestCaseSelection();
 });
 algorithmSelect.addEventListener("change", () => {
   if (networkReady && !routingBusy) setStatus("", "READY TO FIND ROUTE");
@@ -450,4 +559,5 @@ try {
 } catch {
   setTheme("dark");
 }
+loadTestCases();
 renderHistory();
