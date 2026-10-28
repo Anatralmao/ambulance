@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -75,12 +74,12 @@
 
       <div class="map-legend"><span class="legend-line"></span> OPTIMIZED ROUTE <span class="legend-dot"></span> NETWORK NODE</div>
       <div class="coordinate-bars">
-        <div class="coordinate-bar dispatch-coordinate">
-          <span class="coordinate-dot"></span>
+        <div class="coordinate-bar dispatch-coordinate" title="Start: David's Location">
+          <span class="coordinate-david-badge">🏃 DAVID</span>
           <span id="dispatch-address-bar">—</span>
         </div>
 
-        <div class="coordinate-bar hospital-coordinate">
+        <div class="coordinate-bar hospital-coordinate" title="Destination: End Point">
           <span class="coordinate-dot"></span>
           <span id="hospital-address-bar">—</span>
         </div>
@@ -105,14 +104,21 @@
           </div>
         </div>
         <div class="table-wrap"><table><thead><tr><th>#</th><th>DISTANCE</th><th>ALGORITHM</th><th>POINTS</th></tr></thead><tbody id="results-body"></tbody></table></div>
+        <div class="route-replay-actions">
+          <button class="replay-button" id="replay-route" type="button" title="Chạy lại đường đi của David">
+            <span class="replay-icon">&#9654;</span> Replay David
+          </button>
+          <button class="reset-david-button" id="reset-david" type="button" title="Đưa David về điểm xuất phát">
+            <span class="reset-icon">&#8635;</span> Reset to Start
+          </button>
+        </div>
       </section>
 
       <div class="route-action">
         <div class="route-status" id="route-status" role="status" aria-live="polite"><span class="status-dot"></span><span id="status-text">SELECT A SCENARIO TO BEGIN</span></div>
         <button class="find-button" id="find-route" type="button"><span class="button-icon" aria-hidden="true">&#10148;</span><span id="button-text">Find route</span><span class="button-arrow" aria-hidden="true">&#8599;</span></button>
-        <p>Drag both markers to choose the start and destination. Travel time is unavailable.</p>
+        <p>Drag David (start) and the red marker (destination) to choose endpoints.</p>
       </div>
     </main>
   </body>
 </html>
-  

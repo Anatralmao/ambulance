@@ -33,6 +33,8 @@ app = FastAPI(lifespan=lifespan)
 # The graph is backend data; expose only UI assets.
 app.mount("/static/JS", StaticFiles(directory=BASE_DIR / "static/JS"), name="scripts")
 app.mount("/static/CSS", StaticFiles(directory=BASE_DIR / "static/CSS"), name="styles")
+app.mount("/david", StaticFiles(directory=BASE_DIR / "david"), name="david")
+app.mount("/static/david", StaticFiles(directory=BASE_DIR / "david"), name="david_static")
 
 from src.api.routes import router
 

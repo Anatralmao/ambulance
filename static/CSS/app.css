@@ -351,3 +351,189 @@ body[data-theme='light'] td:nth-child(5) { color: #000000; }
   body[data-theme='light'] td:first-child { color: #f07970; }
   body[data-theme='light'] td:nth-child(5) { color: #000000; }
 }
+
+
+/* =========================================================
+   David Marker & Animation Styles
+   ========================================================= */
+
+.david-marker-wrapper {
+  background: transparent !important;
+  border: none !important;
+}
+
+.david-character {
+  position: relative;
+  width: 52px;
+  height: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  user-select: none;
+  cursor: grab;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.45));
+  transition: filter 0.15s ease;
+}
+
+.david-character:active,
+.david-character.is-dragging {
+  cursor: grabbing;
+  filter: drop-shadow(0 14px 20px rgba(0, 0, 0, 0.6)) scale(1.08);
+}
+
+.david-sprite {
+  width: 52px;
+  height: 78px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  transform-origin: 50% 85%;
+  transition: transform 0.12s ease-out;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.david-sprite.facing-left {
+  transform: scaleX(-1);
+}
+
+.david-sprite.facing-right {
+  transform: scaleX(1);
+}
+
+.david-shadow {
+  position: absolute;
+  bottom: 0px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 9px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0) 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.david-speech {
+  position: absolute;
+  top: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(13, 25, 38, 0.95);
+  border: 1px solid var(--cyan, #4bb8c4);
+  color: #fff;
+  font: 11px 'DM Mono', monospace;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  animation: speech-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 100;
+}
+
+.david-speech::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px 5px 0;
+  border-style: solid;
+  border-color: var(--cyan, #4bb8c4) transparent transparent transparent;
+}
+
+@keyframes speech-pop {
+  0% { transform: translateX(-50%) scale(0.6); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+.start-base-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(38, 132, 95, 0.35);
+  border: 2px dashed #26845f;
+  box-shadow: 0 0 12px rgba(38, 132, 95, 0.5);
+  color: #a3e8b8;
+  font: 9px 'DM Mono', monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.start-base-marker:hover {
+  transform: scale(1.1);
+  background: rgba(38, 132, 95, 0.55);
+}
+
+.coordinate-david-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5edb9c;
+  background: rgba(38, 132, 95, 0.2);
+  border: 1px solid rgba(94, 219, 156, 0.4);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.leaflet-tooltip.david-tooltip {
+  border: 1px solid rgba(75, 184, 196, 0.4);
+  background: #0d1926;
+  color: #4bb8c4;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.route-replay-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.replay-button, .reset-david-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-solid);
+  color: var(--text);
+  font: 12.6px 'DM Mono', monospace;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.replay-button {
+  background: #26845f;
+  border-color: #38b482;
+  color: white;
+}
+
+.replay-button:hover {
+  background: #2fa174;
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px rgba(38, 132, 95, 0.35);
+}
+
+.reset-david-button:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  transform: translateY(-1.5px);
+}
