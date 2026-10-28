@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import uvicorn
@@ -30,6 +31,17 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(request, error):
+    # Do not echo non-finite input values into a JSON error response.
+    return JSONResponse(status_code=422, content={"detail": [
+        {key: item[key] for key in ("loc", "msg", "type")}
+        for item in error.errors()
+    ]})
+
+
 # The graph is backend data; expose only UI assets.
 app.mount("/static/JS", StaticFiles(directory=BASE_DIR / "static/JS"), name="scripts")
 app.mount("/static/CSS", StaticFiles(directory=BASE_DIR / "static/CSS"), name="styles")

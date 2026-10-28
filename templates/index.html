@@ -7,9 +7,9 @@
     <meta name="description" content="Ambulance route planning dashboard" />
     <title>Ambufind | Emergency Route Planner</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="/static/CSS/app.css" />
+    <link rel="stylesheet" href="/static/CSS/app.css?v=20261029-fonts" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-    <script src="/static/JS/app.js" defer></script>
+    <script src="/static/JS/app.js?v=20261029-fonts" defer></script>
   </head>
   <body data-theme="dark">
     <main class="app-shell">
@@ -36,6 +36,9 @@
           <option value="astar">A* Search</option>
           <option value="dijkstra">Dijkstra's Algorithm</option>
         </select>
+        <label class="field-label" for="vehicle-speed">ASSUMED SPEED (km/h)</label>
+        <input id="vehicle-speed" class="select-control" type="number" step="any" value="40" required />
+        <p id="scenario-note">Fixed speed simulation; no live traffic.</p>
         <button class="history-trigger" id="history-toggle" type="button" aria-expanded="false" aria-controls="history-menu">
           <span class="history-icon" aria-hidden="true">&#9719;</span><span>Session recordings</span><span class="history-count" id="history-count">0</span><span class="chevron" aria-hidden="true">&#8964;</span>
         </button>
@@ -103,8 +106,12 @@
             >&times;</button>
           </div>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>#</th><th>DISTANCE</th><th>ALGORITHM</th><th>POINTS</th></tr></thead><tbody id="results-body"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>DISTANCE</th><th>ALGORITHM</th><th>ETA</th><th>SPEED</th></tr></thead><tbody id="results-body"></tbody></table></div>
+        <p>Simulation: <output id="simulation-clock">0.0</output> s</p>
+        <label for="playback-speed">Playback</label>
+        <select id="playback-speed"><option value="1">1×</option><option value="10" selected>10×</option><option value="60">60×</option></select>
         <div class="route-replay-actions">
+          <button class="replay-button" id="pause-route" type="button" disabled>Pause</button>
           <button class="replay-button" id="replay-route" type="button" title="Chạy lại đường đi của David">
             <span class="replay-icon">&#9654;</span> Replay David
           </button>

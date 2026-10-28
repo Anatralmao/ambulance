@@ -1,3 +1,7 @@
+# Ghi chú lịch sử N3 — trước tích hợp N2
+
+Trạng thái tích hợp mới nhất: [N2 buổi 1](n2buoi1.md). Contract đang chạy: [INTERFACE.md](INTERFACE.md).
+
 # Bàn giao N3 — Buổi 1
 
 Nguồn yêu cầu: sheet `Buoi 01`, vai trò N3 trong bảng phân công

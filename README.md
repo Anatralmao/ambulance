@@ -12,7 +12,9 @@ server prepares routing in the background. Drag the two markers, select
 A* or Dijkstra, then choose **Find route**. Results respect the directed
 edges in the supplied dataset. A missing connection is reported rather
 than replaced by a demonstration route. The routing result includes estimated
-travel time at an assumed fixed speed of 40 km/h (not live traffic).
+travel time at a configurable fixed speed (default 40 km/h, not live traffic).
+Choose a scenario or drag endpoints, set vehicle speed, then find a route.
+Use Pause/Resume, Replay, Reset and playback 1×/10×/60×; playback does not change ETA.
 
 The browser no longer downloads the full road graph or draws every edge.
 The backend streams [the source graph](static/data/hanoi_map.json), builds
@@ -29,13 +31,14 @@ reload is disabled; restart the server after editing backend code.
 
 API endpoints:
 
+- `GET /api/test-cases`: three N1 scenarios; sample obstacles are not applied.
 - `GET /api/network/status`: `loading`, `ready`, or `error`.
 - `GET /api/nearest?lat=21.03&lng=105.85`: nearest node belonging to a road.
 - `POST /api/route`: JSON with `start` and `goal` objects containing `lat`
-  and `lng`, plus `algorithm` (`astar` or `dijkstra`). Returns route
+  and `lng`, plus `algorithm` (`astar` or `dijkstra`) and optional positive,
+  finite `speed_kmh` (default 40). Returns route
   coordinates, distance, snapped endpoints, assumed speed, segment distances
-  and durations, and total ETA in seconds. The current API uses the default
-  speed; configurable request speed is part of N2's integration. Returns 503 while loading
+  and durations, and total ETA in seconds. Returns 422 for invalid input, 503 while loading
   and 404 when no directed route exists.
 
 Leaflet and OpenStreetMap background tiles still require internet access.
@@ -48,9 +51,21 @@ lists per request.
 Run backend regression tests:
 
 ```sh
-python -m unittest discover -s tests -v
+python -m pip install -r requirements-dev.txt
+python -B -m unittest discover -s tests -v
+```
+
+To include all three Hanoi scenarios through the API (PowerShell):
+
+```powershell
+$env:RUN_DATASET_TESTS='1'
+python -B -m unittest discover -s tests -v
 ```
 
 To verify the loading improvement, open browser DevTools Network and reload
 the page: there should be no request for `hanoi_map.json`. Routing readiness
 is polled separately; route requests return only the selected path.
+
+See [the live API contract](docs/INTERFACE.md) and [integration verification](docs/n2buoi1.md).
+N1 hospital verification sources are still pending. Scenario TC03 snaps its
+start about 385 m; snapping does not establish ambulance access to a hospital.

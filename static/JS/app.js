@@ -1,28 +1,5 @@
 let sessions = loadSessions();
 
-const FALLBACK_TEST_CASES = {
-  cases: [
-    {
-      case_id: "TC01",
-      description: "Normal route",
-      hospital: { id: 8502010001, name: "Bach Mai Hospital", coords: [21.0058, 105.8501], verified: true },
-      emergency_target: { id: 8502010002, coords: [21.0126, 105.8678] },
-    },
-    {
-      case_id: "TC02",
-      description: "One-way detour",
-      hospital: { id: 8502010008, name: "Vietnam-Germany Hospital", coords: [21.0175, 105.8472], verified: true },
-      emergency_target: { id: 8502010009, coords: [21.0241, 105.8604] },
-    },
-    {
-      case_id: "TC03",
-      description: "Obstacle bypass",
-      hospital: { id: 8502010012, name: "Saint Paul General Hospital", coords: [21.0308, 105.8445], verified: true },
-      emergency_target: { id: 8502010013, coords: [21.0383, 105.8597] },
-    },
-  ],
-};
-
 const byId = (id) => document.getElementById(id);
 const testCaseSelect = byId("test-case");
 const algorithmSelect = byId("algorithm");
@@ -51,7 +28,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 const initialPoints = [[21.0435, 105.8231], [21.0069, 105.8434]];
 let routeLayer = null;
-let availableTestCases = FALLBACK_TEST_CASES.cases;
+let availableTestCases = [];
 
 // =========================================================
 // David Avatar & Marker Configuration
@@ -198,6 +175,41 @@ function hideStartBase() {
 let isDavidRunning = false;
 let davidAnimId = null;
 let lastCalculatedRoute = null;
+let routeVersion = 0;
+let simulationSeconds = 0;
+let simulationPaused = false;
+let previousFrame = null;
+const pauseButton = byId("pause-route");
+const vehicleSpeed = byId("vehicle-speed");
+
+function updateSimulationControls() {
+  byId("simulation-clock").textContent = simulationSeconds.toFixed(1);
+  pauseButton.textContent = simulationPaused ? "Resume" : "Pause";
+  pauseButton.disabled = !lastCalculatedRoute || (!isDavidRunning && !simulationPaused);
+  replayRouteButton.disabled = !lastCalculatedRoute;
+}
+
+function invalidateRoute() {
+  routeVersion++;
+  routingBusy = false;
+  byId("button-text").textContent = "Find route";
+  cancelDavidRun();
+  lastCalculatedRoute = null;
+  simulationSeconds = 0;
+  checkpointLayers.forEach(marker => {
+    marker.snapVersion = (marker.snapVersion || 0) + 1;
+    const key = marker.options.positionKey;
+    addressVersions[key] = (addressVersions[key] || 0) + 1;
+    delete marker.options.graphNodeId;
+  });
+  if (davidMarker.startLatLng) davidMarker.setLatLng(davidMarker.startLatLng);
+  if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+  resultsPanel.hidden = true;
+  hideStartBase();
+  hideDavidSpeech();
+  updateSimulationControls();
+  updateFindButton();
+}
 
 function cancelDavidRun() {
   if (davidAnimId) {
@@ -205,11 +217,19 @@ function cancelDavidRun() {
     davidAnimId = null;
   }
   isDavidRunning = false;
+  simulationPaused = false;
+  previousFrame = null;
   setDavidSprite(false);
 }
 
 function resetDavidToStart() {
+  routeVersion++;
+  routingBusy = false;
+  byId("button-text").textContent = "Find route";
   cancelDavidRun();
+  simulationSeconds = 0;
+  updateSimulationControls();
+  updateFindButton();
   hideStartBase();
   hideDavidSpeech();
   const startPos = davidMarker.startLatLng || initialPoints[0];
@@ -220,84 +240,78 @@ function resetDavidToStart() {
   setStatus("", "DAVID ĐÃ VỀ ĐIỂM XUẤT PHÁT — SẴN SÀNG");
 }
 
-function runDavidAlongRoute(coords) {
-  if (!coords || coords.length < 2) return;
+function runDavidAlongRoute(route) {
+  if (!route || !route.coordinates.length) return;
   cancelDavidRun();
+  simulationSeconds = 0;
   isDavidRunning = true;
-
-  // Show Start base marker at origin
-  showStartBase(coords[0]);
-  davidMarker.setLatLng(coords[0]);
+  showStartBase(route.coordinates[0]);
+  davidMarker.setLatLng(route.coordinates[0]);
   setDavidSprite(true);
-  showDavidSpeech("Đang chạy tới đích! 🏃💨");
-  setStatus("running", "DAVID ĐANG CHẠY ĐẾN ĐIỂM ĐÍCH...");
-
-  // Compute cumulative distances
-  const cumDistances = [0];
-  let totalDist = 0;
-  for (let i = 0; i < coords.length - 1; i++) {
-    const p1 = L.latLng(coords[i]);
-    const p2 = L.latLng(coords[i + 1]);
-    const d = p1.distanceTo(p2);
-    totalDist += d;
-    cumDistances.push(totalDist);
-  }
-
-  // Duration scales dynamically between 3.2s and 6.5s
-  const duration = Math.min(6500, Math.max(3200, totalDist * 0.65));
-  let startTime = null;
-
-  function step(timestamp) {
-    if (!startTime) startTime = timestamp;
-    const elapsed = timestamp - startTime;
-    const progress = Math.min(elapsed / duration, 1.0);
-    const targetDist = progress * totalDist;
-
-    // Find current line segment
-    let idx = 0;
-    while (idx < cumDistances.length - 1 && cumDistances[idx + 1] < targetDist) {
-      idx++;
-    }
-
-    const segStartDist = cumDistances[idx];
-    const segEndDist = cumDistances[idx + 1] || (segStartDist + 0.0001);
-    const segProgress = (targetDist - segStartDist) / (segEndDist - segStartDist || 1);
-
-    const p1 = coords[idx];
-    const p2 = coords[Math.min(idx + 1, coords.length - 1)];
-
-    const curLat = p1[0] + (p2[0] - p1[0]) * segProgress;
-    const curLng = p1[1] + (p2[1] - p1[1]) * segProgress;
-
-    davidMarker.setLatLng([curLat, curLng]);
-
-    // Face direction of movement
-    const dlng = p2[1] - p1[1];
-    if (dlng > 0.00003) {
-      setDavidSprite(true, "right");
-    } else if (dlng < -0.00003) {
-      setDavidSprite(true, "left");
-    }
-
-    if (progress < 1.0) {
-      davidAnimId = requestAnimationFrame(step);
-    } else {
-      // Arrived at destination!
-      isDavidRunning = false;
-      davidAnimId = null;
-      davidMarker.setLatLng(coords[coords.length - 1]);
-      setDavidSprite(false);
-      showDavidSpeech("Đã đến nơi! 🏁✨", 6000);
-      setStatus("complete", "DAVID ĐÃ ĐẾN ĐIỂM ĐÍCH! (HOÀN THÀNH)");
-    }
-  }
-
-  davidAnimId = requestAnimationFrame(step);
+  setStatus("running", "SIMULATION RUNNING");
+  updateSimulationControls();
+  updateFindButton();
+  // The backend's segment times are authoritative, including zero-length edges.
+  advanceSimulation(0);
+  if (isDavidRunning) davidAnimId = requestAnimationFrame(simulationStep);
 }
+
+function advanceSimulation(deltaSeconds) {
+  const route = lastCalculatedRoute;
+  if (!route) return;
+  simulationSeconds = Math.min(route.estimated_time_sec, simulationSeconds + deltaSeconds);
+  const coords = route.coordinates;
+  let remaining = simulationSeconds;
+  let index = 0;
+  while (index < route.segment_durations_sec.length && remaining >= route.segment_durations_sec[index]) {
+    remaining -= route.segment_durations_sec[index++];
+  }
+  if (index >= coords.length - 1 || simulationSeconds >= route.estimated_time_sec) {
+    davidMarker.setLatLng(coords[coords.length - 1]);
+    isDavidRunning = false;
+    simulationPaused = false;
+    davidAnimId = null;
+    setDavidSprite(false);
+    showDavidSpeech("Đã đến nơi!", 6000);
+    setStatus("complete", "ARRIVED AT DESTINATION");
+  } else {
+    const fraction = remaining / route.segment_durations_sec[index];
+    const a = coords[index], b = coords[index + 1];
+    davidMarker.setLatLng([a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction]);
+    setDavidSprite(true, b[1] < a[1] ? "left" : "right");
+  }
+  updateSimulationControls();
+  updateFindButton();
+}
+
+function simulationStep(timestamp) {
+  if (!isDavidRunning) return;
+  const elapsed = previousFrame === null ? 0 : (timestamp - previousFrame) / 1000;
+  previousFrame = timestamp;
+  advanceSimulation(elapsed * Number(byId("playback-speed").value));
+  if (isDavidRunning) davidAnimId = requestAnimationFrame(simulationStep);
+}
+
+pauseButton.addEventListener("click", () => {
+  if (isDavidRunning) {
+    cancelDavidRun();
+    simulationPaused = true;
+    setStatus("", "SIMULATION PAUSED");
+  } else if (simulationPaused && lastCalculatedRoute) {
+    simulationPaused = false;
+    isDavidRunning = true;
+    previousFrame = null;
+    setDavidSprite(true);
+    setStatus("running", "SIMULATION RUNNING");
+    davidAnimId = requestAnimationFrame(simulationStep);
+  }
+  updateSimulationControls();
+  updateFindButton();
+});
 
 function replayDavidRun() {
   if (lastCalculatedRoute && lastCalculatedRoute.coordinates) {
-    runDavidAlongRoute(lastCalculatedRoute.coordinates);
+    runDavidAlongRoute(lastCalculatedRoute);
   }
 }
 
@@ -322,15 +336,19 @@ function renderMarkerPosition(marker, nodeStatus) {
   if (lngBar) lngBar.textContent = lng;
 }
 
+const addressVersions = {};
 async function updateAddressBar(key, lat, lng) {
+  const version = addressVersions[key] = (addressVersions[key] || 0) + 1;
   try {
     const data = await apiJson(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=vi`
     );
 
+    if (addressVersions[key] !== version) return;
     byId(`${key}-address-bar`).textContent =
       data.display_name || "Address unavailable";
   } catch {
+    if (addressVersions[key] !== version) return;
     byId(`${key}-address-bar`).textContent = "Address unavailable";
   }
 }
@@ -340,6 +358,8 @@ let activeMarker = null;
 
 function startMarkerDrag(event) {
   if (routingBusy || isDavidRunning) return;
+  invalidateRoute();
+  testCaseSelect.value = "custom";
   activeMarker = event.target;
   activeMarker.snapVersion = (activeMarker.snapVersion || 0) + 1;
   delete activeMarker.options.graphNodeId;
@@ -390,7 +410,8 @@ function updateFindButton() {
 async function apiJson(url, options) {
   const response = await fetch(url, options);
   const data = await response.json();
-  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Invalid request");
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail :
+    Array.isArray(data.detail) ? data.detail.map(error => `${error.loc.join(".")}: ${error.msg}`).join("; ") : "Invalid request");
   return data;
 }
 
@@ -518,7 +539,7 @@ function escapeHtml(value) {
 
 function renderResults(route) {
   const distance = route.distance_km.toFixed(2) + " km";
-  resultBody.innerHTML = `<tr><td>1</td><td>${distance}</td><td>${escapeHtml(algorithmSelect.selectedOptions[0].textContent)}</td><td>${route.coordinates.length}</td></tr>`;
+  resultBody.innerHTML = `<tr><td>1</td><td>${distance}</td><td>${escapeHtml(route.algorithm)}</td><td>${route.estimated_time_sec.toFixed(1)} s</td><td>${route.speed_kmh} km/h</td></tr>`;
   resultsPanel.hidden = false;
 }
 
@@ -625,7 +646,11 @@ makeDraggable(
 
 async function findRoute() {
   if (!networkReady || routingBusy || isDavidRunning || pendingSnaps || activeMarker) return;
-  cancelDavidRun();
+  vehicleSpeed.setCustomValidity(Number(vehicleSpeed.value) > 0 && Number.isFinite(Number(vehicleSpeed.value)) ? "" : "Speed must be finite and greater than zero.");
+  if (!vehicleSpeed.reportValidity()) return;
+  invalidateRoute();
+  const version = routeVersion;
+  const selectedCase = testCaseSelect.value;
   routingBusy = true;
   updateFindButton();
   byId("button-text").textContent = "Computing route...";
@@ -648,8 +673,10 @@ async function findRoute() {
     const result = await apiJson("/api/route", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ start, goal, algorithm: algorithmSelect.value }),
+      body: JSON.stringify({ start, goal, algorithm: algorithmSelect.value, speed_kmh: Number(vehicleSpeed.value) }),
     });
+
+    if (version !== routeVersion) return;
 
     // Update markers to snap locations
     davidMarker.setLatLng([result.start.lat, result.start.lng]);
@@ -658,7 +685,11 @@ async function findRoute() {
 
     davidMarker.options.graphNodeId = result.start.id;
     endMarker.options.graphNodeId = result.goal.id;
-    checkpointLayers.forEach(marker => renderMarkerPosition(marker));
+    checkpointLayers.forEach(marker => {
+      renderMarkerPosition(marker);
+      const position = marker.getLatLng();
+      updateAddressBar(marker.options.positionKey, position.lat, position.lng);
+    });
 
     // Draw route polyline
     routeLayer = L.polyline(result.coordinates, {
@@ -669,8 +700,10 @@ async function findRoute() {
     renderResults(result);
 
     sessions.push({
-      testCase: testCaseSelect.value || "Custom marker route",
-      algorithm: algorithmSelect.selectedOptions[0].textContent,
+      testCase: selectedCase || "Custom marker route",
+      algorithm: result.algorithm,
+      speed_kmh: result.speed_kmh,
+      estimated_time_sec: result.estimated_time_sec,
       timestamp: new Date().toLocaleString(),
       routes: 1,
     });
@@ -681,11 +714,12 @@ async function findRoute() {
     lastCalculatedRoute = result;
 
     // Trigger David running animation!
-    runDavidAlongRoute(result.coordinates);
+    runDavidAlongRoute(result);
 
   } catch (error) {
-    setStatus("error", error.message);
+    if (version === routeVersion) setStatus("error", error.message);
   } finally {
+    if (version !== routeVersion) return;
     routingBusy = false;
     byId("button-text").textContent = "Find route";
     updateFindButton();
@@ -710,6 +744,7 @@ byId("theme-toggle").addEventListener("click", () => {
 findButton.addEventListener("click", findRoute);
 
 function setMarkerPosition(marker, coords, label) {
+  marker.snapVersion = (marker.snapVersion || 0) + 1;
   const [lat, lng] = coords;
   marker.setLatLng([lat, lng]);
   if (marker === davidMarker) {
@@ -728,7 +763,7 @@ function setMarkerPosition(marker, coords, label) {
 }
 
 function applyTestCaseSelection() {
-  cancelDavidRun();
+  invalidateRoute();
   hideStartBase();
   hideDavidSpeech();
 
@@ -778,11 +813,13 @@ async function loadTestCases() {
     const data = await apiJson("/api/test-cases");
     if (data && Array.isArray(data.cases)) {
       availableTestCases = data.cases;
+      byId("scenario-note").textContent = "Fixed-speed simulation without traffic obstacles. Hospital locations are provisional.";
     } else if (Array.isArray(data)) {
       availableTestCases = data;
     }
   } catch (error) {
-    availableTestCases = FALLBACK_TEST_CASES.cases;
+    availableTestCases = [];
+    byId("scenario-note").textContent = "Scenarios unavailable — reload to retry. Custom routing remains available.";
   }
 
   testCaseSelect.innerHTML =
@@ -797,16 +834,16 @@ async function loadTestCases() {
 }
 
 testCaseSelect.addEventListener("change", () => {
-  if (testCaseSelect.value === "custom") {
-    if (networkReady && !routingBusy && !isDavidRunning) setStatus("", "READY TO FIND ROUTE");
-    return;
-  }
   applyTestCaseSelection();
+  if (testCaseSelect.value === "custom") setStatus("", "READY TO FIND ROUTE");
 });
 
-algorithmSelect.addEventListener("change", () => {
-  if (networkReady && !routingBusy && !isDavidRunning) setStatus("", "READY TO FIND ROUTE");
-});
+for (const input of [algorithmSelect, vehicleSpeed]) {
+  input.addEventListener("change", () => {
+    invalidateRoute();
+    setStatus("", "READY TO FIND ROUTE");
+  });
+}
 
 byId("zoom-in").addEventListener("click", () => {
   map.zoomIn();
@@ -822,3 +859,5 @@ try {
 }
 loadTestCases();
 renderHistory();
+
+updateSimulationControls();
