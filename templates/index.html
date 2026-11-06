@@ -7,13 +7,10 @@
     <meta name="description" content="Ambulance route planning dashboard" />
     <title>Ambufind | Emergency Route Planner</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="/static/CSS/app.css?v=20261106-random-closure-v2" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-    <script src="/static/JS/app.js?v=20261106-random-closure-v2" defer></script>
     <link rel="stylesheet" href="/static/CSS/app.css?v=20261106-b02" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
     <script src="/static/JS/traffic.js?v=20261106-b02" defer></script>
-    <script src="/static/JS/app.js?v=20261106-b02" defer></script>
+    <script src="/static/JS/app.js?v=20261107-merge-fix" defer></script>
   </head>
   <body data-theme="dark">
     <main class="app-shell">
@@ -30,7 +27,6 @@
       </header>
 
       <aside class="control-panel" aria-label="Route controls">
-        <div class="panel-heading"><div><span class="eyebrow">DISPATCH CONSOLE</span><h1>Route planner</h1></div><div class="panel-heading-actions"></div></div>
         <div class="panel-heading"><div><span class="eyebrow">DISPATCH CONSOLE</span><h1>Route planner</h1></div><div class="panel-heading-actions"><span class="panel-index">01 / 03</span><button class="collapse-button" type="button" data-collapse="control" aria-expanded="true" aria-label="Collapse route planner" title="Collapse">&minus;</button></div></div>
         <label class="field-label" for="test-case">ROUTE SELECTION</label>
         <select id="test-case" class="select-control">
@@ -41,9 +37,9 @@
           <option value="astar">A* Search</option>
           <option value="dijkstra">Dijkstra's Algorithm</option>
         </select>
-        <label class="field-label" for="traffic-scenario">TRAFFIC SCENARIO</label>
-        <select id="traffic-scenario" class="select-control"></select>
-        <label class="field-label" for="objective">OPTIMIZE FOR</label>
+        <label class="field-label" id="mock-scenario-label" for="mock-scenario" hidden>MOCK TRAFFIC SCENARIO</label>
+        <select id="mock-scenario" class="select-control" hidden></select>
+        <label class="field-label" id="objective-label" for="objective" hidden>OPTIMIZE FOR</label>
         <select id="objective" class="select-control"></select>
         <label class="field-label" for="vehicle-speed">ASSUMED SPEED (km/h)</label>
         <input id="vehicle-speed" class="select-control" type="number" step="any" value="40" required />
@@ -127,10 +123,8 @@
             >&times;</button>
           </div>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>#</th><th>DISTANCE</th><th>ALGORITHM</th><th>ETA</th><th>SPEED</th></tr></thead><tbody id="results-body"></tbody></table></div>
         <p id="traffic-result-note"></p>
         <p id="traffic-comparison" hidden></p>
-        <p>Simulation: <output id="simulation-clock">0.0</output> s</p>
         <div class="table-wrap"><table><thead><tr><th>OBJECTIVE</th><th>DISTANCE</th><th>ALGORITHM</th><th>ETA</th><th>SPEED</th><th>JAM / SLOW</th></tr></thead><tbody id="results-body"></tbody></table></div>
         <p class="route-inputs" id="route-inputs"></p>
         <p class="route-compare" id="route-compare"></p>
