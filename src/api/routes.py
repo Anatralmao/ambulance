@@ -23,6 +23,7 @@ class RouteRequest(BaseModel):
     algorithm: Literal["astar", "dijkstra"] = "astar"
     speed_kmh: float = Field(default=DEFAULT_SPEED_KMH, gt=0, allow_inf_nan=False)
     traffic_scenario_id: TrafficScenarioId | None = None
+    objective: Literal["distance", "time"] | None = None
 
 
 class SnappedPoint(Point):
@@ -32,10 +33,12 @@ class SnappedPoint(Point):
 
 class RouteResponse(BaseModel):
     coordinates: list[tuple[float, float]]
+    segment_edges: list[tuple[str, str]]
     distance_km: float
     start: SnappedPoint
     goal: SnappedPoint
     algorithm: Literal["astar", "dijkstra"]
+    objective: Literal["distance", "time"]
     speed_kmh: float
     segment_distances_km: list[float]
     segment_speeds_kmh: list[float]
@@ -75,8 +78,14 @@ def nearest(request: Request, lat: float = Query(ge=-90, le=90),
 def route(body: RouteRequest, request: Request):
     road_network = network(request)
     try:
-        result = road_network.route(body.start, body.goal, body.algorithm, body.speed_kmh,
-                       body.traffic_scenario_id)
+        result = road_network.route(
+            body.start,
+            body.goal,
+            body.algorithm,
+            body.speed_kmh,
+            body.traffic_scenario_id,
+            body.objective,
+        )
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
     if result is None:

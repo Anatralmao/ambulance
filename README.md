@@ -47,10 +47,12 @@ API endpoints:
 - `GET /api/nearest?lat=21.03&lng=105.85`: nearest node belonging to a road.
 - `POST /api/route`: JSON with `start` and `goal` objects containing `lat`
   and `lng`, plus `algorithm` (`astar` or `dijkstra`) and optional positive,
-  finite `speed_kmh` (default 40) and optional traffic scenario. Returns route
+  finite `speed_kmh` (default 40), optional `traffic_scenario_id`, and optional
+  `objective` (`distance` or `time`). Returns route
   coordinates, distance, snapped endpoints, assumed speed, segment distances,
-  speeds and durations, per-segment speed sources, and total ETA in seconds. With an
-  event selected, route search minimizes ETA; without one it minimizes distance.
+  directed segment node pairs, speeds and durations, per-segment speed sources,
+  and total ETA in seconds. Omitting `objective` preserves the old behavior:
+  traffic scenarios minimize ETA and requests without a scenario minimize distance.
   Returns 422 for invalid input, 503 while loading
   and 404 when no directed route exists.
 

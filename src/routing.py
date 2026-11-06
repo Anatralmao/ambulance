@@ -175,15 +175,17 @@ class RoadNetwork:
         return resolved
 
     def route(self, start, goal, algorithm, speed_kmh=DEFAULT_SPEED_KMH,
-              traffic_scenario_id=None):
-        """Find a shortest-distance route, or a shortest-time scenario route.
+              traffic_scenario_id=None, objective=None):
+        """Find a route by distance or travel time, with legacy defaults.
 
         Segment i connects coordinates[i] to coordinates[i + 1]. Distances
         come from graph edges, not straight lines between their endpoints.
-        No directed route returns None; invalid speed raises ValueError.
+        No directed route returns None; invalid inputs raise ValueError.
         """
         if not math.isfinite(speed_kmh) or speed_kmh <= 0:
             raise ValueError("Speed must be finite and greater than zero (km/h)")
+        if objective not in (None, "distance", "time"):
+            raise ValueError("Objective must be 'distance' or 'time'")
         scenario = None
         resolved_scenario = None
         if traffic_scenario_id is not None:
@@ -193,19 +195,28 @@ class RoadNetwork:
                 raise ValueError("Unknown traffic scenario")
             if not resolved_scenario or not resolved_scenario["available"]:
                 raise ValueError("Traffic scenario edges are not present in the road network")
+        resolved_objective = objective or ("time" if scenario is not None else "distance")
         route_speed_kmh = (40.0 if scenario and scenario.get("kind") == "road_closure"
                            else speed_kmh)
+        scenario_speed = scenario.get("speed_kmh") if scenario is not None else None
         start_index, start_point = self.nearest(start.lat, start.lng)
         goal_index, goal_point = self.nearest(goal.lat, goal.lng)
         search_graph = self.graph
         heuristic_scale = self.heuristic_scale
-        if scenario is not None:
+        if scenario is not None or resolved_objective == "time":
             search_graph = self.graph.copy()
-        if scenario is not None:
+        if resolved_objective == "time":
             search_graph.data *= 3600 / route_speed_kmh
-            scenario_speed = scenario.get("speed_kmh")
             maximum_edge_speed = max(route_speed_kmh, scenario_speed or route_speed_kmh)
             heuristic_scale *= 3600 / maximum_edge_speed
+            if scenario is not None and scenario_speed is not None:
+                for source, target in resolved_scenario["event_edges"]:
+                    offset = self._edge_offset(search_graph, source, target)
+                    if offset is not None:
+                        search_graph.data[offset] = (
+                            float(self.graph[source, target]) / scenario_speed * 3600
+                        )
+        # Closed roads are removed for both objectives.
         blocked_edges = set()
         if scenario is not None and scenario.get("kind") == "road_closure":
             blocked_edges.update(resolved_scenario["closed_edges"])
@@ -218,13 +229,6 @@ class RoadNetwork:
                 (search_graph.data[keep], (sources[keep], search_graph.indices[keep])),
                 shape=search_graph.shape,
             )
-        if scenario is not None and scenario.get("kind") != "road_closure":
-            for source, target in resolved_scenario["event_edges"]:
-                offset = self._edge_offset(search_graph, source, target)
-                if offset is not None:
-                    search_graph.data[offset] = (
-                        float(self.graph[source, target]) / scenario_speed * 3600
-                    )
         if algorithm == "dijkstra":
             distances, parents = dijkstra(search_graph, directed=True,
                                           indices=start_index, return_predecessors=True)
@@ -241,6 +245,8 @@ class RoadNetwork:
         path.reverse()
         segment_distances = [float(self.graph[source, target])
                              for source, target in zip(path, path[1:])]
+        segment_edges = [(str(self.ids[source]), str(self.ids[target]))
+                         for source, target in zip(path, path[1:])]
         event_edges = set(resolved_scenario["event_edges"]) if scenario is not None else set()
         segment_speeds = [
             scenario["speed_kmh"] if (source, target) in event_edges else route_speed_kmh
@@ -284,8 +290,10 @@ class RoadNetwork:
                     f"Other roads have no live speed data; {route_speed_kmh:g} km/h is assumed."
                 )
         return {"coordinates": self.coordinates[path].tolist(),
+                "segment_edges": segment_edges,
                 "distance_km": distance, "start": start_point,
                 "goal": goal_point, "algorithm": algorithm,
+                "objective": resolved_objective,
                 "speed_kmh": float(route_speed_kmh),
                 "segment_distances_km": segment_distances,
                 "segment_speeds_kmh": segment_speeds,

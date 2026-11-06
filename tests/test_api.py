@@ -52,6 +52,8 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(result["segment_durations_sec"], [expected])
                 self.assertEqual(result["speed_kmh"], speed or 40)
                 self.assertEqual(result["algorithm"], algorithm)
+                self.assertEqual(result["objective"], "distance")
+                self.assertEqual(result["segment_edges"], [["a", "b"]])
                 self.assertEqual(result["start"]["id"], "a")
 
     def test_invalid_inputs_are_422(self):

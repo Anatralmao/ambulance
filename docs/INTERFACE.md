@@ -56,15 +56,18 @@ Nếu tải kịch bản lỗi, UI báo lỗi và vẫn cho chọn điểm tùy 
   "goal": {"lat": 21.0058, "lng": 105.8501},
   "algorithm": "astar",
   "speed_kmh": 40,
-  "traffic_scenario_id": "traffic_jam_tc01"
+  "traffic_scenario_id": "traffic_jam_tc01",
+  "objective": "time"
 }
 ```
 
 `start`, `goal` bắt buộc. `algorithm` là `astar` (mặc định) hoặc `dijkstra`.
 `speed_kmh` mặc định 40, phải hữu hạn và > 0; đây là tốc độ giả định nền.
-Không có `traffic_scenario_id`: thuật toán tối ưu khoảng cách và tính ETA ở tốc độ
-nền. Có kịch bản: thuật toán tối ưu thời gian theo tốc độ từng cạnh và đường đóng;
-các cạnh không có số liệu trực tiếp dùng `speed_kmh` làm giả định.
+`objective` có thể là `distance` hoặc `time`. Khi không gửi trường này, hành vi
+tương thích cũ được giữ: không có scenario thì tối ưu khoảng cách, có scenario thì
+tối ưu thời gian. `distance` tối thiểu hóa tổng chiều dài; `time` tối thiểu hóa tổng
+thời lượng cạnh theo tốc độ của scenario, dùng `speed_kmh` trên cạnh không có tốc độ
+riêng. Đường đóng bị loại khỏi graph với cả hai objective.
 
 ## GET /api/traffic-scenarios
 
@@ -99,10 +102,12 @@ Response 200 (ví dụ trên fixture nhỏ, không phải kịch bản Hà Nội
 ```json
 {
   "coordinates": [[21, 105], [21, 105.001]],
+  "segment_edges": [["a", "b"]],
   "distance_km": 0.2,
   "start": {"id": "a", "lat": 21, "lng": 105, "distance_meters": 0},
   "goal": {"id": "b", "lat": 21, "lng": 105.001, "distance_meters": 0},
   "algorithm": "astar",
+  "objective": "distance",
   "speed_kmh": 40,
   "segment_distances_km": [0.2],
   "segment_speeds_kmh": [40],
@@ -121,6 +126,7 @@ Response 200 (ví dụ trên fixture nhỏ, không phải kịch bản Hà Nội
 
 Đoạn thứ i nối `coordinates[i]` tới `coordinates[i+1]`. Các mảng `segment_*` có
 độ dài `len(coordinates)-1`; khoảng cách lấy từ cạnh đồ thị, không đo lại từ polyline.
+`segment_edges[i]` giữ cặp node có hướng `[from_node_id, to_node_id]` của đoạn tương ứng.
 `segment_durations_sec[i] = segment_distances_km[i] / segment_speeds_kmh[i] * 3600`.
 `segment_speed_sources` là `simulated` hoặc `no_live_data_assumed`. Khi đóng đường,
 các cạnh bị chặn không xuất hiện trong route; mọi cạnh còn lại tiếp tục dùng tốc độ

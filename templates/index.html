@@ -7,10 +7,10 @@
     <meta name="description" content="Ambulance route planning dashboard" />
     <title>Ambufind | Emergency Route Planner</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="/static/CSS/app.css?v=20261106-b02" />
+    <link rel="stylesheet" href="/static/CSS/app.css?v=20261107-integration" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-    <script src="/static/JS/traffic.js?v=20261106-b02" defer></script>
-    <script src="/static/JS/app.js?v=20261107-merge-fix" defer></script>
+    <script src="/static/JS/traffic.js?v=20261107-integration" defer></script>
+    <script src="/static/JS/app.js?v=20261107-integration" defer></script>
   </head>
   <body data-theme="dark">
     <main class="app-shell">
@@ -37,18 +37,12 @@
           <option value="astar">A* Search</option>
           <option value="dijkstra">Dijkstra's Algorithm</option>
         </select>
-        <label class="field-label" id="mock-scenario-label" for="mock-scenario" hidden>MOCK TRAFFIC SCENARIO</label>
-        <select id="mock-scenario" class="select-control" hidden></select>
-        <label class="field-label" id="objective-label" for="objective" hidden>OPTIMIZE FOR</label>
+        <label class="field-label" for="traffic-scenario">TRAFFIC EVENT</label>
+        <select id="traffic-scenario" class="select-control"></select>
+        <label class="field-label" for="objective">OPTIMIZE FOR</label>
         <select id="objective" class="select-control"></select>
         <label class="field-label" for="vehicle-speed">ASSUMED SPEED (km/h)</label>
         <input id="vehicle-speed" class="select-control" type="number" step="any" value="40" required />
-        <label class="field-label" for="traffic-scenario">TRAFFIC EVENT</label>
-        <select id="traffic-scenario" class="select-control">
-          <option value="">No event</option>
-          <option value="peak_hour">Peak-hour traffic (12 km/h)</option>
-          <option value="road_closure">Random road closure (2 roads; 40 km/h)</option>
-        </select>
         <p id="scenario-note">Fixed speed simulation; no live traffic.</p>
         <button class="history-trigger" id="history-toggle" type="button" aria-expanded="false" aria-controls="history-menu">
           <span class="history-icon" aria-hidden="true">&#9719;</span><span>Session recordings</span><span class="history-count" id="history-count">0</span><span class="chevron" aria-hidden="true">&#8964;</span>
@@ -123,11 +117,11 @@
             >&times;</button>
           </div>
         </div>
-        <p id="traffic-result-note"></p>
-        <p id="traffic-comparison" hidden></p>
         <div class="table-wrap"><table><thead><tr><th>OBJECTIVE</th><th>DISTANCE</th><th>ALGORITHM</th><th>ETA</th><th>SPEED</th><th>JAM / SLOW</th></tr></thead><tbody id="results-body"></tbody></table></div>
         <p class="route-inputs" id="route-inputs"></p>
         <p class="route-compare" id="route-compare"></p>
+        <p id="traffic-comparison" hidden></p>
+        <p id="traffic-result-note"></p>
         <p>Simulation: <output id="simulation-clock">0.0</output> s · <output id="current-segment">—</output></p>
         <label for="playback-speed">Playback</label>
         <select id="playback-speed"><option value="1">1×</option><option value="10" selected>10×</option><option value="60">60×</option></select>
