@@ -26,6 +26,8 @@ Trạng thái: **phần giao diện xong, chờ API của N2/N3 để ghép**. H
   (trước đây có thể dừng ở đoạn giữa vì các đoạn cuối rất ngắn bị vượt trong một khung hình);
   (2) bỏ `min-height: 812px` của `.app-shell` trên desktop, nên nút **Find route** không bị
   khuất khi cửa sổ thấp (laptop có phóng to màn hình). Lỗi (2) có từ trước Buổi 2.
+- Nút **−/+** trên thanh tiêu đề của bảng *Route planner* và *Computed route*: thu gọn bảng chỉ còn
+  tiêu đề để xem toàn tuyến và xe chạy, bấm lại để mở. Thu gọn không dừng mô phỏng. Hai bảng vẫn kéo được bằng tiêu đề như cũ.
 
 File: [static/JS/traffic.js](../static/JS/traffic.js) (mới: danh sách tình huống, màu,
 chuẩn hóa response, dữ liệu giả), [static/JS/app.js](../static/JS/app.js),

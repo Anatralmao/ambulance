@@ -26,6 +26,23 @@ if (closeResultsButton) {
   });
 }
 
+// Collapse a panel to its header so the map and the moving vehicle stay visible.
+for (const button of document.querySelectorAll(".collapse-button")) {
+  button.addEventListener("click", () => {
+    const panel = button.closest(".control-panel, .results-panel");
+    // Pin the header where it is: the results panel is anchored to the bottom by default.
+    const shellTop = document.querySelector(".app-shell").getBoundingClientRect().top;
+    panel.style.top = `${panel.getBoundingClientRect().top - shellTop}px`;
+    panel.style.bottom = "auto";
+    const collapsed = panel.classList.toggle("is-collapsed");
+    const name = button.dataset.collapse === "control" ? "route planner" : "route results";
+    button.innerHTML = collapsed ? "&plus;" : "&minus;";
+    button.title = collapsed ? "Expand" : "Collapse";
+    button.setAttribute("aria-expanded", String(!collapsed));
+    button.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${name}`);
+  });
+}
+
 const resultBody = byId("results-body");
 const map = L.map("hanoi-map", { zoomControl: false }).setView([21.0285, 105.8542], 12);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {

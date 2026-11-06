@@ -559,3 +559,14 @@ body[data-theme='light'] td:nth-child(5) { color: #000000; }
 @media (min-width: 761px) {
   .app-shell { min-height: 0; }
 }
+
+/* Collapse buttons: shrink a panel to its header so the route stays visible. */
+.panel-heading-actions { display: flex; align-items: flex-start; gap: 12.6px; }
+.collapse-button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--border); border-radius: 7px; color: var(--muted); background: transparent; font-size: 22px; line-height: 1; cursor: pointer; }
+.collapse-button:hover { color: var(--text); border-color: var(--cyan); }
+.control-panel.is-collapsed { padding-bottom: 0; overflow: hidden; }
+.control-panel.is-collapsed > :not(.panel-heading) { display: none; }
+.control-panel.is-collapsed .panel-heading { margin-bottom: 21px; }
+.results-panel.is-collapsed { min-height: 0; }
+.results-panel.is-collapsed > :not(.results-head) { display: none; }
+.results-panel.is-collapsed .results-head { border-bottom: 0; }
