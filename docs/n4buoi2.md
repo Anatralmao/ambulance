@@ -34,6 +34,28 @@ chuẩn hóa response, dữ liệu giả), [static/JS/app.js](../static/JS/app.j
 [templates/index.html](../templates/index.html), [static/CSS/app.css](../static/CSS/app.css),
 [tests/js/traffic.test.mjs](../tests/js/traffic.test.mjs).
 
+## Bản ghép buổi 2 (nhánh `buoi2-integration`, 07/11)
+
+Gộp backend của Giang (6 kịch bản, closure seed, Overpass có fallback) và Chóc (`objective`)
+với giao diện N4, trên nền bản sửa mới nhất của nhánh test (commit "wh"). Giao diện **theo contract
+backend trong [INTERFACE.md](INTERFACE.md)**; đề xuất contract cũ bên dưới không còn dùng.
+
+- Ô **Traffic event**: No event / Peak-hour (12 km/h) / Road closure. Ghép với TC đang chọn thành
+  `traffic_scenario_id` (`traffic_jam_tc01`, `road_closure_tc02`...). Ô **Optimize for** gửi `objective`.
+- Mỗi lần Find route gọi `/api/route` với `objective=distance` và `time`; có sự kiện thì gọi thêm
+  bản không sự kiện (baseline). Bảng 2 dòng + câu so sánh mục tiêu + dòng so sánh có/không sự kiện.
+- Màu đoạn lấy từ `segment_speeds_kmh` (12/40 km/h = đỏ). Tuyến còn lại vẽ nét đứt **cùng màu**,
+  nên đoạn tắc mà tuyến nhanh nhất né vẫn thấy trên bản đồ.
+- Bảng kết quả kéo được trở lại (mặc định góc dưới phải); tính kéo đúng với `--ui-scale`.
+- `?mock=1` dùng cùng 3 sự kiện (đường thẳng, tốc độ giả).
+
+Kiểm tra trên bản đồ Hà Nội thật: `RUN_DATASET_TESTS=1` 3/3 pass; trình duyệt 3 TC × 3 sự kiện.
+Giờ cao điểm: tuyến nhanh nhất dài hơn nhưng nhanh hơn ở cả 3 TC (TC01 +0.07 km / −22.9 s,
+TC02 +0.04 km / −25.3 s, TC03 +0.01 km / −35.0 s). Đóng đường: đi vòng, +36 s đến +1 min 16 s.
+
+Còn mở: cạnh song song vẫn bị gộp trong `routing.py` (B02-04, N3); quyết định nguồn bản đồ
+(Overpass hay `hanoi_map.json`).
+
 ## Quy ước đặt tên đã theo
 
 Theo mục "Quy ước" của [INTERFACE.md](INTERFACE.md) và các trường có sẵn trong API:

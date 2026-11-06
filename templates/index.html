@@ -7,10 +7,10 @@
     <meta name="description" content="Ambulance route planning dashboard" />
     <title>Ambufind | Emergency Route Planner</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="/static/CSS/app.css?v=20261106-b02" />
+    <link rel="stylesheet" href="/static/CSS/app.css?v=20261107-integration" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-    <script src="/static/JS/traffic.js?v=20261106-b02" defer></script>
-    <script src="/static/JS/app.js?v=20261106-b02" defer></script>
+    <script src="/static/JS/traffic.js?v=20261107-integration" defer></script>
+    <script src="/static/JS/app.js?v=20261107-integration" defer></script>
   </head>
   <body data-theme="dark">
     <main class="app-shell">
@@ -37,7 +37,7 @@
           <option value="astar">A* Search</option>
           <option value="dijkstra">Dijkstra's Algorithm</option>
         </select>
-        <label class="field-label" for="traffic-scenario">TRAFFIC SCENARIO</label>
+        <label class="field-label" for="traffic-scenario">TRAFFIC EVENT</label>
         <select id="traffic-scenario" class="select-control"></select>
         <label class="field-label" for="objective">OPTIMIZE FOR</label>
         <select id="objective" class="select-control"></select>
@@ -120,6 +120,8 @@
         <div class="table-wrap"><table><thead><tr><th>OBJECTIVE</th><th>DISTANCE</th><th>ALGORITHM</th><th>ETA</th><th>SPEED</th><th>JAM / SLOW</th></tr></thead><tbody id="results-body"></tbody></table></div>
         <p class="route-inputs" id="route-inputs"></p>
         <p class="route-compare" id="route-compare"></p>
+        <p id="traffic-comparison" hidden></p>
+        <p id="traffic-result-note"></p>
         <p>Simulation: <output id="simulation-clock">0.0</output> s · <output id="current-segment">—</output></p>
         <label for="playback-speed">Playback</label>
         <select id="playback-speed"><option value="1">1×</option><option value="10" selected>10×</option><option value="60">60×</option></select>
