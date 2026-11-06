@@ -22,6 +22,11 @@ Trạng thái: **phần giao diện xong, chờ API của N2/N3 để ghép**. H
   km và giây, mọi đoạn hiện màu xanh và ghi "no traffic data — fixed speed". API Buổi 1 bỏ qua
   `scenario_id`/`objective` nên gửi thêm không gây lỗi.
 
+- Sửa thêm 2 lỗi giao diện: (1) khi xe đến nơi, dòng đoạn hiện "segment n/n · arrived"
+  (trước đây có thể dừng ở đoạn giữa vì các đoạn cuối rất ngắn bị vượt trong một khung hình);
+  (2) bỏ `min-height: 812px` của `.app-shell` trên desktop, nên nút **Find route** không bị
+  khuất khi cửa sổ thấp (laptop có phóng to màn hình). Lỗi (2) có từ trước Buổi 2.
+
 File: [static/JS/traffic.js](../static/JS/traffic.js) (mới: danh sách tình huống, màu,
 chuẩn hóa response, dữ liệu giả), [static/JS/app.js](../static/JS/app.js),
 [templates/index.html](../templates/index.html), [static/CSS/app.css](../static/CSS/app.css),

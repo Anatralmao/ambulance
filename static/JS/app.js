@@ -253,6 +253,7 @@ function runDavidAlongRoute(route) {
   if (!route || !route.coordinates.length) return;
   cancelDavidRun();
   simulationSeconds = 0;
+  byId("current-segment").textContent = "—";
   isDavidRunning = true;
   showStartBase(route.coordinates[0]);
   davidMarker.setLatLng(route.coordinates[0]);
@@ -283,6 +284,9 @@ function advanceSimulation(deltaSeconds) {
     setDavidSprite(false);
     showDavidSpeech("Đã đến nơi!", 6000);
     setStatus("complete", "ARRIVED AT DESTINATION");
+    // Short final segments can be crossed within one frame, so report the end explicitly.
+    const total = route.segment_durations_sec.length;
+    byId("current-segment").textContent = `segment ${total}/${total} · arrived`;
   } else {
     const fraction = remaining / route.segment_durations_sec[index];
     const a = coords[index], b = coords[index + 1];

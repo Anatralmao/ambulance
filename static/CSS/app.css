@@ -553,3 +553,9 @@ body[data-theme='light'] td:nth-child(5) { color: #000000; }
 .route-inputs, .route-compare { margin: 10px 22px 0; color: var(--muted); font: 13px 'DM Mono', 'Segoe UI', Arial, monospace; white-space: normal; }
 .route-compare { color: var(--text); }
 .route-inputs .mock-badge { margin-left: 6px; padding: 2px 8px; border-radius: 20px; color: #1a1300; background: #f2b33d; font-weight: 700; }
+/* Desktop: let the page fit short windows (e.g. laptops with display scaling) so the
+   Find route button is not pushed below the viewport; the max-height: 700px rules above
+   already compact the layout for this case. Phones keep their own min-height. */
+@media (min-width: 761px) {
+  .app-shell { min-height: 0; }
+}
