@@ -541,6 +541,11 @@ function renderResults(route) {
   const distance = route.distance_km.toFixed(2) + " km";
   resultBody.innerHTML = `<tr><td>1</td><td>${distance}</td><td>${escapeHtml(route.algorithm)}</td><td>${route.estimated_time_sec.toFixed(1)} s</td><td>${route.speed_kmh} km/h</td></tr>`;
   resultsPanel.hidden = false;
+  resultsPanel.style.position = "fixed";
+  resultsPanel.style.right = "28px";
+  resultsPanel.style.bottom = "24px";
+  resultsPanel.style.left = "auto";
+  resultsPanel.style.top = "auto";
 }
 
 function setStatus(kind, message) {
@@ -637,11 +642,6 @@ makeDraggable(
 makeDraggable(
   historyMenu,
   document.querySelector(".history-window-head")
-);
-
-makeDraggable(
-  document.querySelector(".results-panel"),
-  document.querySelector(".results-head")
 );
 
 async function findRoute() {
