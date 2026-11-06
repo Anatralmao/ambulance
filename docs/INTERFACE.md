@@ -10,8 +10,8 @@ Các module thuật toán nghiên cứu độc lập chưa được tích hợp 
 - Vĩ độ trong [-90, 90], kinh độ trong [-180, 180].
 - Khoảng cách tuyến/cạnh: km; thời lượng/ETA: giây; tốc độ xe: km/h.
 - `distance_meters` của điểm snap là khoảng cách snap tính bằng mét (trường cũ).
-- Một xe, một hành trình từ điểm cấp cứu tới bệnh viện chọn trước; tốc độ cố định,
-  chưa có dữ liệu giao thông động, ML hoặc tái định tuyến.
+- Một xe, một hành trình từ điểm cấp cứu tới bệnh viện chọn trước; không có dữ liệu
+  giao thông trực tiếp hoặc dự đoán ML.
 
 ## GET /api/test-cases
 
@@ -51,13 +51,41 @@ Nếu tải kịch bản lỗi, UI báo lỗi và vẫn cho chọn điểm tùy 
   "start": {"lat": 21.0126, "lng": 105.8678},
   "goal": {"lat": 21.0058, "lng": 105.8501},
   "algorithm": "astar",
-  "speed_kmh": 40
+  "speed_kmh": 40,
+  "traffic_scenario_id": "traffic_jam_tc01"
 }
 ```
 
 `start`, `goal` bắt buộc. `algorithm` là `astar` (mặc định) hoặc `dijkstra`.
-`speed_kmh` mặc định 40, phải hữu hạn và > 0; đây là giả định mô phỏng.
-Hai thuật toán tiếp tục tối ưu khoảng cách. Tốc độ không thay đổi đường đi.
+`speed_kmh` mặc định 40, phải hữu hạn và > 0; đây là tốc độ giả định nền.
+Không có `traffic_scenario_id`: thuật toán tối ưu khoảng cách và tính ETA ở tốc độ
+nền. Có kịch bản: thuật toán tối ưu thời gian theo tốc độ từng cạnh và đường đóng;
+các cạnh không có số liệu trực tiếp dùng `speed_kmh` làm giả định.
+
+## GET /api/traffic-scenarios
+
+Trả sáu kịch bản: tắc đường và đóng đường cho từng route bệnh viện:
+
+| ID | Trạng thái |
+|---|---|
+| `traffic_jam_tc01` | TC01, 12 km/h trên 5 cạnh |
+| `traffic_jam_tc02` | TC02, 12 km/h trên 5 cạnh |
+| `traffic_jam_tc03` | TC03, 12 km/h trên 5 cạnh |
+| `road_closure_tc01` | TC01, đóng ngẫu nhiên 2 trong 5 cạnh ứng viên |
+| `road_closure_tc02` | TC02, đóng ngẫu nhiên 2 trong 5 cạnh ứng viên |
+| `road_closure_tc03` | TC03, đóng ngẫu nhiên 2 trong 5 cạnh ứng viên |
+
+Các tốc độ 12 km/h là giả định kiểm thử, không phải quan sát giao thông thật.
+API trả `traffic_event_edges` và `traffic_event_speed_kmh` riêng vì bộ định tuyến
+có thể chọn đường vòng và không đi qua cạnh bị tắc. `segment_speeds_kmh` vẫn mô tả
+chính xác các cạnh trên route kết quả. Cạnh khác chưa có tốc độ trực tiếp nên dùng
+tốc độ nền và có nguồn `no_live_data_assumed`. UI giữ test case bệnh viện và corridor
+đồng bộ: chọn TC01–TC03 sẽ áp sự kiện cùng mã. `road_closure` dùng seed cố định
+riêng cho mỗi TC để chọn lại luôn đóng đúng hai đường; chặn cả chiều ngược nếu graph
+có cạnh ngược. Closure bỏ qua `speed_kmh` của request và cố định mọi đường còn mở ở
+40 km/h. `traffic_event_count`
+là số đường vật lý được chọn; `traffic_event_edges` liệt kê các hướng thực sự bị chặn;
+`traffic_event_seed` dùng để tái lập lựa chọn. Custom tắt overlay.
 
 Response 200 (ví dụ trên fixture nhỏ, không phải kịch bản Hà Nội ở trên):
 
@@ -70,24 +98,36 @@ Response 200 (ví dụ trên fixture nhỏ, không phải kịch bản Hà Nội
   "algorithm": "astar",
   "speed_kmh": 40,
   "segment_distances_km": [0.2],
+  "segment_speeds_kmh": [40],
+  "segment_speed_sources": ["no_live_data_assumed"],
   "segment_durations_sec": [18],
-  "estimated_time_sec": 18
+  "estimated_time_sec": 18,
+  "traffic_scenario_id": null,
+  "traffic_event_type": null,
+  "traffic_event_speed_kmh": null,
+  "traffic_event_count": 0,
+  "traffic_event_seed": null,
+  "traffic_event_edges": [],
+  "traffic_note": "No live segment speeds; 40 km/h is assumed on every road."
 }
 ```
 
-Đoạn thứ i nối `coordinates[i]` tới `coordinates[i+1]`. Hai mảng đoạn có độ dài
-`len(coordinates)-1`; khoảng cách lấy từ cạnh đồ thị, không đo lại từ polyline.
-`segment_durations_sec[i] = segment_distances_km[i] / speed_kmh * 3600`.
-Tổng thời lượng đoạn bằng ETA; so với `distance_km / speed_kmh * 3600` trong sai số số thực.
+Đoạn thứ i nối `coordinates[i]` tới `coordinates[i+1]`. Các mảng `segment_*` có
+độ dài `len(coordinates)-1`; khoảng cách lấy từ cạnh đồ thị, không đo lại từ polyline.
+`segment_durations_sec[i] = segment_distances_km[i] / segment_speeds_kmh[i] * 3600`.
+`segment_speed_sources` là `simulated` hoặc `no_live_data_assumed`. Khi đóng đường,
+các cạnh bị chặn không xuất hiện trong route; mọi cạnh còn lại tiếp tục dùng tốc độ
+nền, mặc định 40 km/h.
+Tổng thời lượng đoạn bằng ETA.
 Không làm tròn ở backend. ETA không bao gồm đoạn nối từ tọa độ yêu cầu tới node snap.
 
-Cùng node: một tọa độ, hai mảng rỗng, khoảng cách/ETA bằng 0.
+Cùng node: một tọa độ, các mảng `segment_*` rỗng, khoảng cách/ETA bằng 0.
 Không có đường: HTTP 404, `{"detail": "No directed road route connects these points"}`;
 không tạo tuyến giả. Không dùng schema nghiên cứu `success/path/error` cho live API.
 
 ## Lỗi và trạng thái
 
-- 422: thiếu trường, sai tọa độ/thuật toán, tốc độ không hợp lệ hoặc ETA tràn số.
+- 422: thiếu trường, sai tọa độ/thuật toán/kịch bản, tốc độ không hợp lệ hoặc ETA tràn số.
   Lỗi validation có `detail: [{"loc": [...], "msg": "...", "type": "..."}]`;
   lỗi tính toán có `detail` dạng chuỗi. UI hỗ trợ cả hai.
 - 503: graph đang tải hoặc tải lỗi; khi đang tải có header `Retry-After: 2`.

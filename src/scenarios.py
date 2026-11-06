@@ -82,6 +82,70 @@ SOURCE_TEST_CASES = {
 }
 
 
+TRAFFIC_SCENARIOS = {
+    "traffic_jam_tc01": {
+        "id": "traffic_jam_tc01",
+        "kind": "peak_congestion",
+        "label": "TC01 - Traffic jam, 12 km/h",
+        "description": "Simulated peak-hour congestion",
+        "route_case_id": "TC01",
+        "event_edges": (
+            ("node_4592527911", "node_12783034931"),
+            ("node_12783034931", "node_6661805155"),
+            ("node_6661805155", "node_8259084423"),
+            ("node_8259084423", "node_6408478722"),
+            ("node_6408478722", "node_6661963558"),
+        ),
+        "speed_kmh": 12.0,
+    },
+    "traffic_jam_tc02": {
+        "id": "traffic_jam_tc02",
+        "kind": "peak_congestion",
+        "label": "TC02 - Traffic jam, 12 km/h",
+        "description": "Simulated peak-hour congestion",
+        "route_case_id": "TC02",
+        "event_edges": (
+            ("node_6662487546", "node_14213870915"),
+            ("node_14213870915", "node_14213870917"),
+            ("node_14213870917", "node_5704382356"),
+            ("node_5704382356", "node_14213870918"),
+            ("node_14213870918", "node_14213870916"),
+        ),
+        "speed_kmh": 12.0,
+    },
+    "traffic_jam_tc03": {
+        "id": "traffic_jam_tc03",
+        "kind": "peak_congestion",
+        "label": "TC03 - Traffic jam, 12 km/h",
+        "description": "Simulated peak-hour congestion",
+        "route_case_id": "TC03",
+        "event_edges": (
+            ("node_8333410690", "node_6579567129"),
+            ("node_6579567129", "node_6579567128"),
+            ("node_6579567128", "node_6579567127"),
+            ("node_6579567127", "node_6579567125"),
+            ("node_6579567125", "node_6668090146"),
+        ),
+        "speed_kmh": 12.0,
+    },
+}
+
+for case_number in range(1, 4):
+    case_id = f"TC{case_number:02d}"
+    congestion = TRAFFIC_SCENARIOS[f"traffic_jam_tc{case_number:02d}"]
+    scenario_id = f"road_closure_tc{case_number:02d}"
+    TRAFFIC_SCENARIOS[scenario_id] = {
+        "id": scenario_id,
+        "label": f"{case_id} - Random road closure",
+        "description": "Two roads selected with a fixed random seed and closed in both directions",
+        "route_case_id": case_id,
+        "kind": "road_closure",
+        "candidate_edges": congestion["event_edges"],
+        "closed_road_count": 2,
+        "random_seed": 7200 + case_number,
+    }
+
+
 # N1's supplied coordinates are preserved. IDs are scenario IDs, not graph nodes.
 # Obstacles and expected metrics are reference material, not routing inputs.
 TEST_CASES = {

@@ -2,6 +2,7 @@ let sessions = loadSessions();
 
 const byId = (id) => document.getElementById(id);
 const testCaseSelect = byId("test-case");
+const trafficScenarioSelect = byId("traffic-scenario");
 const algorithmSelect = byId("algorithm");
 const findButton = byId("find-route");
 const status = byId("route-status");
@@ -29,6 +30,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 const initialPoints = [[21.0435, 105.8231], [21.0069, 105.8434]];
 let routeLayer = null;
 let availableTestCases = [];
+let availableTrafficScenarios = [];
 
 // =========================================================
 // David Avatar & Marker Configuration
@@ -205,6 +207,7 @@ function invalidateRoute() {
   if (davidMarker.startLatLng) davidMarker.setLatLng(davidMarker.startLatLng);
   if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
   resultsPanel.hidden = true;
+  byId("traffic-comparison").hidden = true;
   hideStartBase();
   hideDavidSpeech();
   updateSimulationControls();
@@ -360,6 +363,8 @@ function startMarkerDrag(event) {
   if (routingBusy || isDavidRunning) return;
   invalidateRoute();
   testCaseSelect.value = "custom";
+  trafficScenarioSelect.value = "";
+  updateTrafficScenarioNote();
   activeMarker = event.target;
   activeMarker.snapVersion = (activeMarker.snapVersion || 0) + 1;
   delete activeMarker.options.graphNodeId;
@@ -537,9 +542,31 @@ function escapeHtml(value) {
   })[char]);
 }
 
-function renderResults(route) {
+function renderResults(route, baseline = null) {
   const distance = route.distance_km.toFixed(2) + " km";
-  resultBody.innerHTML = `<tr><td>1</td><td>${distance}</td><td>${escapeHtml(route.algorithm)}</td><td>${route.estimated_time_sec.toFixed(1)} s</td><td>${route.speed_kmh} km/h</td></tr>`;
+  const routeSpeeds = [...new Set(route.segment_speeds_kmh)];
+  const isClosure = route.traffic_event_type === "road_closure";
+  const speedLabel = route.traffic_scenario_id && !isClosure
+    ? `${routeSpeeds.join("/") || "No segments"} km/h route`
+    : `${route.speed_kmh} km/h`;
+  const eventSpeedNote = isClosure
+    ? `<br><small>${route.traffic_event_count} roads closed</small>`
+    : route.traffic_scenario_id
+      ? `<br><small>${route.traffic_event_speed_kmh} km/h on ${route.traffic_event_edges.length} event edges</small>`
+      : "";
+  resultBody.innerHTML = `<tr><td>1</td><td>${distance}</td><td>${escapeHtml(route.algorithm)}</td><td>${route.estimated_time_sec.toFixed(1)} s</td><td>${escapeHtml(speedLabel)}${eventSpeedNote}</td></tr>`;
+  const closedEdges = isClosure
+    ? ` Closed directed edges: ${route.traffic_event_edges.map((edge) => edge.join(" -> ")).join(", ")}.`
+    : "";
+  byId("traffic-result-note").textContent = route.traffic_note + closedEdges;
+  const comparison = byId("traffic-comparison");
+  comparison.hidden = !baseline;
+  if (baseline) {
+    const etaDelta = route.estimated_time_sec - baseline.estimated_time_sec;
+    const distanceDelta = route.distance_km - baseline.distance_km;
+    const eventLabel = isClosure ? "Road closure" : "Peak traffic";
+    comparison.textContent = `Baseline: ${baseline.estimated_time_sec.toFixed(1)} s, ${baseline.distance_km.toFixed(2)} km. ${eventLabel}: ${route.estimated_time_sec.toFixed(1)} s, ${route.distance_km.toFixed(2)} km (${etaDelta >= 0 ? "+" : ""}${etaDelta.toFixed(1)} s; ${distanceDelta >= 0 ? "+" : ""}${distanceDelta.toFixed(2)} km).`;
+  }
   resultsPanel.hidden = false;
   resultsPanel.style.position = "fixed";
   resultsPanel.style.right = "28px";
@@ -651,6 +678,7 @@ async function findRoute() {
   invalidateRoute();
   const version = routeVersion;
   const selectedCase = testCaseSelect.value;
+  const selectedTrafficScenario = getSelectedTrafficScenario();
   routingBusy = true;
   updateFindButton();
   byId("button-text").textContent = "Computing route...";
@@ -670,11 +698,24 @@ async function findRoute() {
     const start = { lat: startPoint.lat, lng: startPoint.lng };
     const goal = { lat: goalPoint.lat, lng: goalPoint.lng };
 
-    const result = await apiJson("/api/route", {
+    const requestBody = {
+      start, goal, algorithm: algorithmSelect.value,
+      speed_kmh: Number(vehicleSpeed.value),
+      traffic_scenario_id: selectedTrafficScenario?.id || null,
+    };
+    const routeRequest = apiJson("/api/route", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ start, goal, algorithm: algorithmSelect.value, speed_kmh: Number(vehicleSpeed.value) }),
+      body: JSON.stringify(requestBody),
     });
+    const baselineRequest = selectedTrafficScenario
+      ? apiJson("/api/route", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...requestBody, traffic_scenario_id: null }),
+      })
+      : Promise.resolve(null);
+    const [result, baselineResult] = await Promise.all([routeRequest, baselineRequest]);
 
     if (version !== routeVersion) return;
 
@@ -697,10 +738,12 @@ async function findRoute() {
     }).addTo(map);
 
     map.fitBounds(routeLayer.getBounds(), { padding: [90, 90], maxZoom: 14 });
-    renderResults(result);
+    renderResults(result, baselineResult);
 
     sessions.push({
-      testCase: selectedCase || "Custom marker route",
+      testCase: selectedTrafficScenario
+        ? `${selectedCase} - ${result.traffic_event_type === "road_closure" ? "Road closure" : "Peak-hour traffic 12 km/h"}`
+        : selectedCase || "Custom marker route",
       algorithm: result.algorithm,
       speed_kmh: result.speed_kmh,
       estimated_time_sec: result.estimated_time_sec,
@@ -813,13 +856,11 @@ async function loadTestCases() {
     const data = await apiJson("/api/test-cases");
     if (data && Array.isArray(data.cases)) {
       availableTestCases = data.cases;
-      byId("scenario-note").textContent = "Fixed-speed simulation without traffic obstacles. Hospital locations are provisional.";
     } else if (Array.isArray(data)) {
       availableTestCases = data;
     }
   } catch (error) {
     availableTestCases = [];
-    byId("scenario-note").textContent = "Scenarios unavailable — reload to retry. Custom routing remains available.";
   }
 
   testCaseSelect.innerHTML =
@@ -833,14 +874,75 @@ async function loadTestCases() {
   testCaseSelect.value = "custom";
 }
 
+function updateTrafficScenarioNote() {
+  const caseId = testCaseSelect.value;
+  const scenario = getSelectedTrafficScenario();
+  if (!trafficScenarioSelect.value) {
+    byId("scenario-note").textContent = "No live traffic speeds; the assumed speed is used on every segment.";
+  } else if (!scenario) {
+    byId("scenario-note").textContent = "Select TC01, TC02, or TC03 to run this traffic case.";
+  } else if (scenario.kind === "road_closure") {
+    byId("scenario-note").textContent = `${caseId}: closes ${scenario.closed_road_count} randomly selected roads using fixed seed ${scenario.random_seed}; remaining roads are fixed at 40 km/h.`;
+  } else {
+    byId("scenario-note").textContent = `${caseId}: simulated 12 km/h on ${scenario.event_edges.length} directed peak-hour segments; remaining roads use the assumed speed.`;
+  }
+}
+
+function getSelectedTrafficScenario() {
+  if (!trafficScenarioSelect.value || testCaseSelect.value === "custom") {
+    return null;
+  }
+  const prefix = trafficScenarioSelect.value === "road_closure" ? "road_closure" : "traffic_jam";
+  return availableTrafficScenarios.find(
+    (item) => item.id === `${prefix}_${testCaseSelect.value.toLowerCase()}`
+  ) || null;
+}
+
+async function loadTrafficScenarios() {
+  try {
+    availableTrafficScenarios = await apiJson("/api/traffic-scenarios");
+    if (!Array.isArray(availableTrafficScenarios) || availableTrafficScenarios.length !== 6) {
+      throw new Error("Expected traffic scenarios for TC01-TC03");
+    }
+  } catch (error) {
+    availableTrafficScenarios = [];
+    trafficScenarioSelect.disabled = true;
+    byId("scenario-note").textContent = "Traffic scenarios unavailable; fixed-speed routing remains available.";
+    return;
+  }
+  updateTrafficScenarioNote();
+}
+
+function syncClosureSpeedControl() {
+  const closureSelected = trafficScenarioSelect.value === "road_closure";
+  if (closureSelected) vehicleSpeed.value = "40";
+  vehicleSpeed.disabled = closureSelected;
+}
+
 testCaseSelect.addEventListener("change", () => {
+  if (testCaseSelect.value === "custom" && trafficScenarioSelect.value) {
+    trafficScenarioSelect.value = "";
+  }
   applyTestCaseSelection();
+  syncClosureSpeedControl();
+  updateTrafficScenarioNote();
   if (testCaseSelect.value === "custom") setStatus("", "READY TO FIND ROUTE");
+});
+
+trafficScenarioSelect.addEventListener("change", () => {
+  if (trafficScenarioSelect.value && testCaseSelect.value === "custom") {
+    testCaseSelect.value = "TC01";
+  }
+  applyTestCaseSelection();
+  syncClosureSpeedControl();
+  updateTrafficScenarioNote();
+  setStatus("", "READY TO FIND ROUTE");
 });
 
 for (const input of [algorithmSelect, vehicleSpeed]) {
   input.addEventListener("change", () => {
     invalidateRoute();
+    updateTrafficScenarioNote();
     setStatus("", "READY TO FIND ROUTE");
   });
 }
@@ -858,6 +960,8 @@ try {
   setTheme("dark");
 }
 loadTestCases();
+loadTrafficScenarios();
+syncClosureSpeedControl();
 renderHistory();
 
 updateSimulationControls();
