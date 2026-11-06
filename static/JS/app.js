@@ -12,10 +12,34 @@ const resultsPanel = byId("results-panel");
 const closeResultsButton = byId("close-results");
 const replayRouteButton = byId("replay-route");
 const resetDavidButton = byId("reset-david");
+const scenarioSelect = byId("traffic-scenario");
+const objectiveSelect = byId("objective");
+// ?mock=1 uses mock data from traffic.js until the session 2 API (N2/N3) is ready.
+const MOCK_MODE = new URLSearchParams(location.search).get("mock") === "1";
+scenarioSelect.innerHTML = Traffic.SCENARIOS.map(item => `<option value="${item.id}">${item.label}</option>`).join("");
+objectiveSelect.innerHTML = Traffic.OBJECTIVES.map(item => `<option value="${item.id}">${item.label}</option>`).join("");
+objectiveSelect.value = "time";
 
 if (closeResultsButton) {
   closeResultsButton.addEventListener("click", () => {
     resultsPanel.hidden = true;
+  });
+}
+
+// Collapse a panel to its header so the map and the moving vehicle stay visible.
+for (const button of document.querySelectorAll(".collapse-button")) {
+  button.addEventListener("click", () => {
+    const panel = button.closest(".control-panel, .results-panel");
+    // Pin the header where it is: the results panel is anchored to the bottom by default.
+    const shellTop = document.querySelector(".app-shell").getBoundingClientRect().top;
+    panel.style.top = `${panel.getBoundingClientRect().top - shellTop}px`;
+    panel.style.bottom = "auto";
+    const collapsed = panel.classList.toggle("is-collapsed");
+    const name = button.dataset.collapse === "control" ? "route planner" : "route results";
+    button.innerHTML = collapsed ? "&plus;" : "&minus;";
+    button.title = collapsed ? "Expand" : "Collapse";
+    button.setAttribute("aria-expanded", String(!collapsed));
+    button.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${name}`);
   });
 }
 
@@ -28,6 +52,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 const initialPoints = [[21.0435, 105.8231], [21.0069, 105.8434]];
 let routeLayer = null;
+let alternativeLayer = null;
 let availableTestCases = [];
 
 // =========================================================
@@ -204,6 +229,7 @@ function invalidateRoute() {
   });
   if (davidMarker.startLatLng) davidMarker.setLatLng(davidMarker.startLatLng);
   if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+  if (alternativeLayer) { map.removeLayer(alternativeLayer); alternativeLayer = null; }
   resultsPanel.hidden = true;
   hideStartBase();
   hideDavidSpeech();
@@ -244,6 +270,7 @@ function runDavidAlongRoute(route) {
   if (!route || !route.coordinates.length) return;
   cancelDavidRun();
   simulationSeconds = 0;
+  byId("current-segment").textContent = "—";
   isDavidRunning = true;
   showStartBase(route.coordinates[0]);
   davidMarker.setLatLng(route.coordinates[0]);
@@ -274,11 +301,17 @@ function advanceSimulation(deltaSeconds) {
     setDavidSprite(false);
     showDavidSpeech("Đã đến nơi!", 6000);
     setStatus("complete", "ARRIVED AT DESTINATION");
+    // Short final segments can be crossed within one frame, so report the end explicitly.
+    const total = route.segment_durations_sec.length;
+    byId("current-segment").textContent = `segment ${total}/${total} · arrived`;
   } else {
     const fraction = remaining / route.segment_durations_sec[index];
     const a = coords[index], b = coords[index + 1];
     davidMarker.setLatLng([a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction]);
     setDavidSprite(true, b[1] < a[1] ? "left" : "right");
+    const state = route.segment_status[index];
+    byId("current-segment").textContent =
+      `segment ${index + 1}/${route.segment_durations_sec.length} · ${route.segment_speeds_kmh[index].toFixed(1)} km/h · ${Traffic.STATUS[state].label}`;
   }
   updateSimulationControls();
   updateFindButton();
@@ -436,6 +469,7 @@ async function stopMarkerDrag() {
 }
 
 async function snapMarker(marker) {
+  if (MOCK_MODE) return;
   const version = marker.snapVersion;
   const position = marker.getLatLng();
   renderMarkerPosition(marker, "Finding nearest node…");
@@ -469,6 +503,13 @@ async function snapMarker(marker) {
 }
 
 async function checkNetwork() {
+  if (MOCK_MODE) {
+    // Mock data needs no road graph: skip the network check and node snapping.
+    networkReady = true;
+    updateFindButton();
+    setStatus("", "MOCK MODE — SIMULATED TRAFFIC, NOT REAL RESULTS");
+    return;
+  }
   try {
     const data = await apiJson("/api/network/status");
     networkReady = data.status === "ready";
@@ -525,7 +566,7 @@ function renderHistory() {
       <span class="history-entry-index">${count - index}</span>
       <div class="history-entry-main">
         <div class="history-entry-case" title="${escapeHtml(session.testCase)}">${escapeHtml(session.testCase)}</div>
-        <div class="history-entry-meta">${escapeHtml(session.algorithm)} &middot; ${escapeHtml(session.timestamp)}</div>
+        <div class="history-entry-meta">${escapeHtml(session.algorithm)}${session.scenario ? ` &middot; ${escapeHtml(Traffic.labelOf(Traffic.SCENARIOS, session.scenario))} / ${escapeHtml(session.objective)}` : ""} &middot; ${escapeHtml(session.timestamp)}</div>
       </div>
       <span class="history-entry-meta">${session.routes}R</span>
     </article>`).join("");
@@ -537,15 +578,63 @@ function escapeHtml(value) {
   })[char]);
 }
 
-function renderResults(route) {
-  const distance = route.distance_km.toFixed(2) + " km";
-  resultBody.innerHTML = `<tr><td>1</td><td>${distance}</td><td>${escapeHtml(route.algorithm)}</td><td>${route.estimated_time_sec.toFixed(1)} s</td><td>${route.speed_kmh} km/h</td></tr>`;
+function formatDuration(sec) {
+  const minutes = Math.floor(sec / 60);
+  return minutes ? `${minutes} min ${(sec % 60).toFixed(0)} s` : `${sec.toFixed(1)} s`;
+}
+
+// routes = { distance, time }; selected = the chosen objective (the route the vehicle runs).
+function renderResults(routes, selected) {
+  resultBody.innerHTML = Traffic.OBJECTIVES.map(({ id }) => {
+    const route = routes[id];
+    if (!route) return `<tr><td>${escapeHtml(Traffic.labelOf(Traffic.OBJECTIVES, id))}</td><td colspan="5">Route unavailable</td></tr>`;
+    const jam = route.segment_status.filter(state => state === "jam").length;
+    const slow = route.segment_status.filter(state => state === "slow").length;
+    return `<tr class="${id === selected ? "is-selected" : ""}">
+      <td>${id === selected ? "▶ " : ""}${escapeHtml(Traffic.labelOf(Traffic.OBJECTIVES, id))}</td>
+      <td>${route.distance_km.toFixed(2)} km</td><td>${escapeHtml(route.algorithm)}</td>
+      <td>${formatDuration(route.estimated_time_sec)}</td><td>${route.speed_kmh} km/h</td>
+      <td>${jam} / ${slow}</td></tr>`;
+  }).join("");
+
+  const main = routes[selected];
+  const source = main.mock ? '<span class="mock-badge">MOCK DATA</span>' :
+    main.traffic_applied ? "API" : "API (no traffic data — fixed speed)";
+  byId("route-inputs").innerHTML =
+    `Inputs: traffic <b>${escapeHtml(Traffic.labelOf(Traffic.SCENARIOS, main.scenario_id || scenarioSelect.value))}</b>` +
+    ` · objective <b>${escapeHtml(Traffic.labelOf(Traffic.OBJECTIVES, selected))}</b>` +
+    ` · snapshot ${escapeHtml(main.snapshot_id || "—")} · source ${source}`;
+
+  const diff = Traffic.compare(routes.distance, routes.time);
+  byId("route-compare").textContent = !diff ? "" :
+    Math.abs(diff.extra_km) < 0.005 && Math.abs(diff.saved_sec) < 0.5 ? "Both objectives give the same route in this scenario." :
+    diff.saved_sec > 0 ? `The fastest route is ${diff.extra_km.toFixed(2)} km longer but arrives ${formatDuration(diff.saved_sec)} earlier.` :
+    `The shortest route is also the fastest (by ${formatDuration(-diff.saved_sec)}).`;
   resultsPanel.hidden = false;
   resultsPanel.style.position = "fixed";
   resultsPanel.style.right = "28px";
   resultsPanel.style.bottom = "24px";
   resultsPanel.style.left = "auto";
   resultsPanel.style.top = "auto";
+}
+
+async function requestRoute(body) {
+  const raw = MOCK_MODE ? Traffic.mockRoute(body) : await apiJson("/api/route", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return Traffic.normalize(raw);
+}
+
+function drawColoredRoute(route) {
+  const group = L.featureGroup();
+  for (const run of Traffic.colorRuns(route)) {
+    L.polyline(run.coords, {
+      color: Traffic.STATUS[run.status].color, weight: 6, opacity: 0.95, lineCap: "round", lineJoin: "round",
+    }).addTo(group);
+  }
+  return group.addTo(map);
 }
 
 function setStatus(kind, message) {
@@ -670,13 +759,23 @@ async function findRoute() {
     const start = { lat: startPoint.lat, lng: startPoint.lng };
     const goal = { lat: goalPoint.lat, lng: goalPoint.lng };
 
-    const result = await apiJson("/api/route", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ start, goal, algorithm: algorithmSelect.value, speed_kmh: Number(vehicleSpeed.value) }),
-    });
+    const selected = objectiveSelect.value;
+    const base = {
+      start, goal, algorithm: algorithmSelect.value, speed_kmh: Number(vehicleSpeed.value),
+      scenario_id: scenarioSelect.value,
+    };
+    // Request both objectives for comparison; the selected objective is the route the vehicle runs.
+    const settled = await Promise.allSettled(
+      Traffic.OBJECTIVES.map(({ id }) => requestRoute({ ...base, objective: id })));
 
     if (version !== routeVersion) return;
+    const routes = {};
+    Traffic.OBJECTIVES.forEach(({ id }, i) => {
+      if (settled[i].status === "fulfilled") routes[id] = settled[i].value;
+    });
+    const result = routes[selected];
+    if (!result) throw settled[Traffic.OBJECTIVES.findIndex(({ id }) => id === selected)].reason;
+    const other = routes[selected === "time" ? "distance" : "time"];
 
     // Update markers to snap locations
     davidMarker.setLatLng([result.start.lat, result.start.lng]);
@@ -691,21 +790,28 @@ async function findRoute() {
       updateAddressBar(marker.options.positionKey, position.lat, position.lng);
     });
 
-    // Draw route polyline
-    routeLayer = L.polyline(result.coordinates, {
-      color: "#e34b45", weight: 5, opacity: 0.92, lineCap: "round", lineJoin: "round",
-    }).addTo(map);
+    // Alternative: faint dashed line; selected route: coloured by segment status.
+    if (other) {
+      alternativeLayer = L.polyline(other.coordinates, {
+        color: "#90a5b5", weight: 4, opacity: 0.8, dashArray: "8 8",
+      }).addTo(map);
+    }
+    routeLayer = drawColoredRoute(result);
 
-    map.fitBounds(routeLayer.getBounds(), { padding: [90, 90], maxZoom: 14 });
-    renderResults(result);
+    const bounds = routeLayer.getBounds();
+    if (alternativeLayer) bounds.extend(alternativeLayer.getBounds());
+    map.fitBounds(bounds, { padding: [90, 90], maxZoom: 14 });
+    renderResults(routes, selected);
 
     sessions.push({
       testCase: selectedCase || "Custom marker route",
+      scenario: result.scenario_id || scenarioSelect.value,
+      objective: selected,
       algorithm: result.algorithm,
       speed_kmh: result.speed_kmh,
       estimated_time_sec: result.estimated_time_sec,
       timestamp: new Date().toLocaleString(),
-      routes: 1,
+      routes: Object.keys(routes).length,
     });
     sessions = sessions.slice(-30);
     saveSessions();
@@ -813,7 +919,9 @@ async function loadTestCases() {
     const data = await apiJson("/api/test-cases");
     if (data && Array.isArray(data.cases)) {
       availableTestCases = data.cases;
-      byId("scenario-note").textContent = "Fixed-speed simulation without traffic obstacles. Hospital locations are provisional.";
+      byId("scenario-note").textContent = MOCK_MODE ?
+        "MOCK MODE: segment speeds are simulated for UI testing." :
+        "Traffic scenario is sent to the API; segment speeds come from the backend. Hospital locations are provisional.";
     } else if (Array.isArray(data)) {
       availableTestCases = data;
     }
@@ -838,7 +946,7 @@ testCaseSelect.addEventListener("change", () => {
   if (testCaseSelect.value === "custom") setStatus("", "READY TO FIND ROUTE");
 });
 
-for (const input of [algorithmSelect, vehicleSpeed]) {
+for (const input of [algorithmSelect, vehicleSpeed, scenarioSelect, objectiveSelect]) {
   input.addEventListener("change", () => {
     invalidateRoute();
     setStatus("", "READY TO FIND ROUTE");
