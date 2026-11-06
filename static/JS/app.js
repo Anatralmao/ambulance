@@ -4,6 +4,7 @@ const byId = (id) => document.getElementById(id);
 const testCaseSelect = byId("test-case");
 const trafficScenarioSelect = byId("traffic-scenario");
 const algorithmSelect = byId("algorithm");
+const objectiveSelect = byId("objective");
 const findButton = byId("find-route");
 const status = byId("route-status");
 const statusText = byId("status-text");
@@ -530,7 +531,7 @@ function renderHistory() {
       <span class="history-entry-index">${count - index}</span>
       <div class="history-entry-main">
         <div class="history-entry-case" title="${escapeHtml(session.testCase)}">${escapeHtml(session.testCase)}</div>
-        <div class="history-entry-meta">${escapeHtml(session.algorithm)} &middot; ${escapeHtml(session.timestamp)}</div>
+        <div class="history-entry-meta">${escapeHtml(session.algorithm)} &middot; ${escapeHtml(session.objective || "distance")} &middot; ${escapeHtml(session.timestamp)}</div>
       </div>
       <span class="history-entry-meta">${session.routes}R</span>
     </article>`).join("");
@@ -554,7 +555,8 @@ function renderResults(route, baseline = null) {
     : route.traffic_scenario_id
       ? `<br><small>${route.traffic_event_speed_kmh} km/h on ${route.traffic_event_edges.length} event edges</small>`
       : "";
-  resultBody.innerHTML = `<tr><td>1</td><td>${distance}</td><td>${escapeHtml(route.algorithm)}</td><td>${route.estimated_time_sec.toFixed(1)} s</td><td>${escapeHtml(speedLabel)}${eventSpeedNote}</td></tr>`;
+  const objectiveLabel = route.objective === "time" ? "Fastest time" : "Shortest distance";
+  resultBody.innerHTML = `<tr><td>${objectiveLabel}</td><td>${distance}</td><td>${escapeHtml(route.algorithm)}</td><td>${route.estimated_time_sec.toFixed(1)} s</td><td>${escapeHtml(speedLabel)}${eventSpeedNote}</td></tr>`;
   const closedEdges = isClosure
     ? ` Closed directed edges: ${route.traffic_event_edges.map((edge) => edge.join(" -> ")).join(", ")}.`
     : "";
@@ -702,6 +704,7 @@ async function findRoute() {
       start, goal, algorithm: algorithmSelect.value,
       speed_kmh: Number(vehicleSpeed.value),
       traffic_scenario_id: selectedTrafficScenario?.id || null,
+      objective: objectiveSelect.value,
     };
     const routeRequest = apiJson("/api/route", {
       method: "POST",
@@ -745,6 +748,7 @@ async function findRoute() {
         ? `${selectedCase} - ${result.traffic_event_type === "road_closure" ? "Road closure" : "Peak-hour traffic 12 km/h"}`
         : selectedCase || "Custom marker route",
       algorithm: result.algorithm,
+      objective: result.objective,
       speed_kmh: result.speed_kmh,
       estimated_time_sec: result.estimated_time_sec,
       timestamp: new Date().toLocaleString(),
@@ -939,7 +943,7 @@ trafficScenarioSelect.addEventListener("change", () => {
   setStatus("", "READY TO FIND ROUTE");
 });
 
-for (const input of [algorithmSelect, vehicleSpeed]) {
+for (const input of [algorithmSelect, objectiveSelect, vehicleSpeed]) {
   input.addEventListener("change", () => {
     invalidateRoute();
     updateTrafficScenarioNote();

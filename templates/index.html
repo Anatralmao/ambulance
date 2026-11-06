@@ -36,6 +36,11 @@
           <option value="astar">A* Search</option>
           <option value="dijkstra">Dijkstra's Algorithm</option>
         </select>
+        <label class="field-label" for="objective">OPTIMIZE FOR</label>
+        <select id="objective" class="select-control">
+          <option value="distance">Shortest distance</option>
+          <option value="time" selected>Fastest time</option>
+        </select>
         <label class="field-label" for="vehicle-speed">ASSUMED SPEED (km/h)</label>
         <input id="vehicle-speed" class="select-control" type="number" step="any" value="40" required />
         <label class="field-label" for="traffic-scenario">TRAFFIC EVENT</label>
@@ -112,7 +117,7 @@
             >&times;</button>
           </div>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>#</th><th>DISTANCE</th><th>ALGORITHM</th><th>ETA</th><th>SPEED</th></tr></thead><tbody id="results-body"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>OBJECTIVE</th><th>DISTANCE</th><th>ALGORITHM</th><th>ETA</th><th>SPEED</th></tr></thead><tbody id="results-body"></tbody></table></div>
         <p id="traffic-result-note"></p>
         <p id="traffic-comparison" hidden></p>
         <p>Simulation: <output id="simulation-clock">0.0</output> s</p>
