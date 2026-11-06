@@ -81,7 +81,6 @@ SOURCE_TEST_CASES = {
     },
 }
 
-
 TRAFFIC_SCENARIOS = {
     "traffic_jam_tc01": {
         "id": "traffic_jam_tc01",
@@ -130,9 +129,32 @@ TRAFFIC_SCENARIOS = {
     },
 }
 
+ROAD_CLOSURE_CANDIDATES = {
+    "TC01": (
+        ("node_8121000996", "node_5716648788"),
+        ("node_4592527911", "node_12783034931"),
+        ("node_6688284314", "node_5703840200"),
+        ("node_6661805155", "node_8259084423"),
+        ("node_6408478722", "node_6661963558"),
+    ),
+    "TC02": (
+        ("node_12597779320", "node_438042805"),
+        ("node_6600251029", "node_6600251031"),
+        ("node_6662487546", "node_14213870915"),
+        ("node_14213870915", "node_14213870917"),
+        ("node_14213870917", "node_5704382356"),
+    ),
+    "TC03": (
+        ("node_6689475848", "node_103013298"),
+        ("node_8333410690", "node_6579567129"),
+        ("node_6579567129", "node_6579567128"),
+        ("node_6579567128", "node_6579567127"),
+        ("node_6689479752", "node_6689509687"),
+    ),
+}
+
 for case_number in range(1, 4):
     case_id = f"TC{case_number:02d}"
-    congestion = TRAFFIC_SCENARIOS[f"traffic_jam_tc{case_number:02d}"]
     scenario_id = f"road_closure_tc{case_number:02d}"
     TRAFFIC_SCENARIOS[scenario_id] = {
         "id": scenario_id,
@@ -140,7 +162,7 @@ for case_number in range(1, 4):
         "description": "Two roads selected with a fixed random seed and closed in both directions",
         "route_case_id": case_id,
         "kind": "road_closure",
-        "candidate_edges": congestion["event_edges"],
+        "candidate_edges": ROAD_CLOSURE_CANDIDATES[case_id],
         "closed_road_count": 2,
         "random_seed": 7200 + case_number,
     }
@@ -173,5 +195,5 @@ TEST_CASES = {
         for case in SOURCE_TEST_CASES["cases"]
     ],
     "traffic_obstacles_applied": False,
-    "traffic_note": "Session 1 uses graph direction and fixed speed only; N1 obstacle samples are not applied.",
+    "traffic_note": "N1's sample obstacles are reference data; the UI traffic scenarios are applied separately.",
 }

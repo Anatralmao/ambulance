@@ -148,13 +148,17 @@ class RoadNetwork:
 
         for scenario_id, scenario in TRAFFIC_SCENARIOS.items():
             edge_key = "candidate_edges" if scenario.get("kind") == "road_closure" else "event_edges"
-            indexes = tuple(tuple(node_index(node_id) for node_id in edge)
-                            for edge in scenario[edge_key])
-            available = all(
-                source is not None and target is not None
-                and self._edge_offset(self.graph, source, target) is not None
-                for source, target in indexes
-            )
+            indexes = []
+            for edge in scenario[edge_key]:
+                source, target = (node_index(node_id) for node_id in edge)
+                if (source is not None and target is not None
+                        and self._edge_offset(self.graph, source, target) is not None):
+                    indexes.append((source, target))
+            if scenario.get("kind") == "road_closure":
+                available = len(indexes) >= scenario["closed_road_count"]
+            else:
+                available = bool(indexes)
+            indexes = tuple(indexes)
             if available and scenario.get("kind") == "road_closure":
                 selected = random.Random(scenario["random_seed"]).sample(
                     indexes, scenario["closed_road_count"]
@@ -197,22 +201,27 @@ class RoadNetwork:
         heuristic_scale = self.heuristic_scale
         if scenario is not None:
             search_graph = self.graph.copy()
+        if scenario is not None:
             search_graph.data *= 3600 / route_speed_kmh
             scenario_speed = scenario.get("speed_kmh")
             maximum_edge_speed = max(route_speed_kmh, scenario_speed or route_speed_kmh)
             heuristic_scale *= 3600 / maximum_edge_speed
-            if scenario.get("kind") == "road_closure":
-                sources = np.repeat(np.arange(len(self.ids)), np.diff(search_graph.indptr))
-                keep = np.ones(len(search_graph.data), dtype=bool)
-                for source, target in resolved_scenario["closed_edges"]:
-                    keep &= ~((sources == source) & (search_graph.indices == target))
-                search_graph = csr_matrix(
-                    (search_graph.data[keep], (sources[keep], search_graph.indices[keep])),
-                    shape=search_graph.shape,
-                )
-            elif scenario_speed is not None:
-                for source, target in resolved_scenario["event_edges"]:
-                    offset = self._edge_offset(search_graph, source, target)
+        blocked_edges = set()
+        if scenario is not None and scenario.get("kind") == "road_closure":
+            blocked_edges.update(resolved_scenario["closed_edges"])
+        if blocked_edges:
+            sources = np.repeat(np.arange(len(self.ids)), np.diff(search_graph.indptr))
+            keep = np.ones(len(search_graph.data), dtype=bool)
+            for source, target in blocked_edges:
+                keep &= ~((sources == source) & (search_graph.indices == target))
+            search_graph = csr_matrix(
+                (search_graph.data[keep], (sources[keep], search_graph.indices[keep])),
+                shape=search_graph.shape,
+            )
+        if scenario is not None and scenario.get("kind") != "road_closure":
+            for source, target in resolved_scenario["event_edges"]:
+                offset = self._edge_offset(search_graph, source, target)
+                if offset is not None:
                     search_graph.data[offset] = (
                         float(self.graph[source, target]) / scenario_speed * 3600
                     )

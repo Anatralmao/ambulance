@@ -41,7 +41,11 @@ N4 lấy `emergency_target.coords` làm start, `hospital.coords` làm goal.
 kết quả tìm đường, không dùng tính ETA hoặc tiêu chí pass/fail.
 Tọa độ và dữ liệu gốc N1 được giữ trong `SOURCE_TEST_CASES`; chưa có nguồn xác minh
 bệnh viện đính kèm nên API không khẳng định `verified=true`.
-Các vật cản/penalty/turn restriction mẫu chưa áp dụng. Hướng đường thật lấy từ graph.
+Graph đường được lấy từ Overpass API cho vùng bao quanh ba ca, lưu cache 24 giờ ở
+`.cache/osm`. Nếu API không khả dụng, backend ghi log và dùng cache cũ hoặc graph OSM
+đóng gói trong repo. Các mẫu obstacle/penalty/turn restriction N1 có ID không nằm
+trong graph là dữ liệu tham khảo; các điều kiện được chọn trên UI (kẹt xe/đóng đường)
+mới được áp vào các cạnh OSM tương ứng của TC.
 Nếu tải kịch bản lỗi, UI báo lỗi và vẫn cho chọn điểm tùy chỉnh; không thay bằng dữ liệu cứng.
 
 ## POST /api/route
@@ -80,10 +84,13 @@ API trả `traffic_event_edges` và `traffic_event_speed_kmh` riêng vì bộ đ
 có thể chọn đường vòng và không đi qua cạnh bị tắc. `segment_speeds_kmh` vẫn mô tả
 chính xác các cạnh trên route kết quả. Cạnh khác chưa có tốc độ trực tiếp nên dùng
 tốc độ nền và có nguồn `no_live_data_assumed`. UI giữ test case bệnh viện và corridor
-đồng bộ: chọn TC01–TC03 sẽ áp sự kiện cùng mã. `road_closure` dùng seed cố định
-riêng cho mỗi TC để chọn lại luôn đóng đúng hai đường; chặn cả chiều ngược nếu graph
-có cạnh ngược. Closure bỏ qua `speed_kmh` của request và cố định mọi đường còn mở ở
-40 km/h. `traffic_event_count`
+đồng bộ: chọn TC01–TC03 rồi chọn kẹt xe/đóng đường sẽ áp sự kiện cùng mã.
+`road_closure` dùng seed cố định
+riêng cho mỗi TC để chọn hai đường trong các ứng viên hiện diện trên graph; nếu graph
+không có đủ hai ứng viên, API trả lỗi rõ ràng. Đóng cả chiều ngược nếu graph có cạnh
+ngược. Closure bỏ qua `speed_kmh` của request và cố định mọi đường còn mở ở
+40 km/h. Kẹt xe áp dụng trên các cạnh hành lang hiện diện trong graph.
+`traffic_event_count`
 là số đường vật lý được chọn; `traffic_event_edges` liệt kê các hướng thực sự bị chặn;
 `traffic_event_seed` dùng để tái lập lựa chọn. Custom tắt overlay.
 

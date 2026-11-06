@@ -8,6 +8,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from src.routing import RoadNetwork
+from src.osm_graph import resolve_graph_path
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -19,8 +20,10 @@ async def lifespan(app):
 
     async def prepare():
         try:
+            graph_path = await asyncio.to_thread(
+                resolve_graph_path, BASE_DIR / ".cache/osm", BASE_DIR / "static/data/hanoi_map.json")
             app.state.network = await asyncio.to_thread(
-                RoadNetwork, BASE_DIR / "static/data/hanoi_map.json", BASE_DIR / ".cache/routing")
+                RoadNetwork, graph_path, BASE_DIR / ".cache/routing")
         except Exception:
             app.state.network_error = True
             logging.exception("Could not prepare road network")

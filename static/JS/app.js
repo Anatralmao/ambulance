@@ -543,7 +543,7 @@ function escapeHtml(value) {
 }
 
 function renderResults(route, baseline = null) {
-  const distance = route.distance_km.toFixed(2) + " km";
+  const distance = route.distance_km.toFixed(3) + " km";
   const routeSpeeds = [...new Set(route.segment_speeds_kmh)];
   const isClosure = route.traffic_event_type === "road_closure";
   const speedLabel = route.traffic_scenario_id && !isClosure
@@ -565,7 +565,8 @@ function renderResults(route, baseline = null) {
     const etaDelta = route.estimated_time_sec - baseline.estimated_time_sec;
     const distanceDelta = route.distance_km - baseline.distance_km;
     const eventLabel = isClosure ? "Road closure" : "Peak traffic";
-    comparison.textContent = `Baseline: ${baseline.estimated_time_sec.toFixed(1)} s, ${baseline.distance_km.toFixed(2)} km. ${eventLabel}: ${route.estimated_time_sec.toFixed(1)} s, ${route.distance_km.toFixed(2)} km (${etaDelta >= 0 ? "+" : ""}${etaDelta.toFixed(1)} s; ${distanceDelta >= 0 ? "+" : ""}${distanceDelta.toFixed(2)} km).`;
+    const routeChanged = JSON.stringify(route.coordinates) !== JSON.stringify(baseline.coordinates);
+    comparison.textContent = `Baseline: ${baseline.estimated_time_sec.toFixed(1)} s, ${baseline.distance_km.toFixed(3)} km. ${eventLabel}: ${route.estimated_time_sec.toFixed(1)} s, ${route.distance_km.toFixed(3)} km (${etaDelta >= 0 ? "+" : ""}${etaDelta.toFixed(1)} s; ${distanceDelta >= 0 ? "+" : ""}${distanceDelta.toFixed(3)} km). Route changed: ${routeChanged ? "yes" : "no"}.`;
   }
   resultsPanel.hidden = false;
   resultsPanel.style.position = "fixed";

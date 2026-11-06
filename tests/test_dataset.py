@@ -111,6 +111,13 @@ class DatasetTests(unittest.TestCase):
                         self.assertEqual(set(result["segment_speeds_kmh"]), {40})
                         self.assertGreater(result["estimated_time_sec"],
                                            baseline.json()["estimated_time_sec"])
+                        self.assertGreater(
+                            result["distance_km"],
+                            baseline.json()["distance_km"] + 0.15,
+                        )
+                        self.assertNotEqual(
+                            result["coordinates"], baseline.json()["coordinates"],
+                        )
                         self.assertIn("fixed seed", result["traffic_note"])
                         results.append(result)
                 self.assertEqual(results[0]["traffic_event_edges"],

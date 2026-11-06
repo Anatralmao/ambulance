@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import random
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -68,7 +69,33 @@ class TrafficApiTests(unittest.TestCase):
         }))
         app = FastAPI()
         app.include_router(router)
-        app.state.network = RoadNetwork(self.path)
+        self.network = RoadNetwork(self.path)
+        app.state.network = self.network
+        # This fixture uses the congestion corridor as the closure path; the
+        # production OSM cases use their own closure-candidate edges.
+        node_indexes = {
+            node_id: index for index, node_id in enumerate(self.network.ids)
+        }
+        for case_id, (_, event_nodes, _, _) in self.case_routes.items():
+            scenario_id = f"road_closure_{case_id.lower()}"
+            scenario = TRAFFIC_SCENARIOS[scenario_id]
+            fixture_edges = list(zip(event_nodes, event_nodes[1:]))
+            selected = random.Random(scenario["random_seed"]).sample(
+                fixture_edges, scenario["closed_road_count"]
+            )
+            blocked = {
+                (node_indexes[source], node_indexes[target])
+                for source, target in selected
+            }
+            for source, target in selected:
+                reverse = (node_indexes[target], node_indexes[source])
+                if self.network._edge_offset(self.network.graph, *reverse) is not None:
+                    blocked.add(reverse)
+            self.network._resolved_traffic_scenarios[scenario_id] = {
+                "available": True,
+                "event_edges": (),
+                "closed_edges": tuple(blocked),
+            }
         app.state.network_error = False
         self.client = TestClient(app)
         self.addCleanup(self.client.close)
@@ -152,6 +179,31 @@ class TrafficApiTests(unittest.TestCase):
         start, _, goal, _ = next(iter(self.case_routes.values()))
         response = self.post_route(start, goal, "unknown_event")
         self.assertEqual(response.status_code, 422)
+
+    def test_closure_uses_available_candidates_when_some_are_missing(self):
+        scenario = TRAFFIC_SCENARIOS["road_closure_tc02"]
+        available_candidates = scenario["candidate_edges"][1:]
+        nodes = {}
+        roads = []
+        for index, (source, target) in enumerate(available_candidates):
+            nodes[source] = {"id": source, "lat": 21 + index * 0.001, "lng": 105}
+            nodes[target] = {"id": target, "lat": 21 + index * 0.001, "lng": 105.001}
+            roads.append({
+                "from": source,
+                "to": target,
+                "distance_km": 0.1,
+                "bidirectional": False,
+            })
+        graph_path = Path(self.directory.name) / "partial-map.json"
+        graph_path.write_text(json.dumps({
+            "nodes": list(nodes.values()),
+            "roads": roads,
+        }))
+
+        network = RoadNetwork(graph_path)
+        resolved = network._resolved_traffic_scenarios["road_closure_tc02"]
+        self.assertTrue(resolved["available"])
+        self.assertEqual(len(resolved["closed_edges"]), 2)
 
 
 if __name__ == "__main__":

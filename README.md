@@ -19,14 +19,18 @@ test assumptions; all other roads have no live speed data and use the assumed sp
 The peak-hour option applies 12 km/h to a five-edge corridor matching the selected
 hospital case (TC01, TC02, or TC03). Random closure selects two candidate roads with a
 fixed per-case seed and fixes every remaining road at 40 km/h. Both modes
-compare ETA and distance with baseline.
+compare ETA and distance with baseline. Scenario edges missing from a refreshed
+OSM graph are skipped; road closure requires at least two available candidate roads.
 Use Pause/Resume, Replay, Reset and playback 1×/10×/60×; playback does not change ETA.
 
 The browser no longer downloads the full road graph or draws every edge.
-The backend streams [the source graph](static/data/hanoi_map.json), builds
-a compact sparse graph, and indexes connected nodes on a sphere for nearest
+At startup, the backend fetches the Hanoi road graph from the Overpass API and
+caches it for 24 hours under `.cache/osm`. If Overpass is unavailable, it logs
+the failure and uses a stale cache or the bundled OSM graph. It builds
+a compact sparse graph and indexes connected nodes on a sphere for nearest
 node queries. Parallel edges retain their minimum cost. A* uses a chord
 distance lower bound scaled to the dataset's edge weights.
+Road data is © OpenStreetMap contributors.
 
 The first startup builds a binary cache under `.cache/routing`. Subsequent
 startups reuse it and rebuild the spatial index. Changing the JSON's size
@@ -37,13 +41,13 @@ reload is disabled; restart the server after editing backend code.
 
 API endpoints:
 
-- `GET /api/test-cases`: three N1 hospital cases; N1 obstacle samples are not applied.
+- `GET /api/test-cases`: three hospital cases; N1 obstacle samples remain reference data.
 - `GET /api/traffic-scenarios`: TC01-TC03 peak-traffic and seeded road-closure cases.
 - `GET /api/network/status`: `loading`, `ready`, or `error`.
 - `GET /api/nearest?lat=21.03&lng=105.85`: nearest node belonging to a road.
 - `POST /api/route`: JSON with `start` and `goal` objects containing `lat`
   and `lng`, plus `algorithm` (`astar` or `dijkstra`) and optional positive,
-  finite `speed_kmh` (default 40). Returns route
+  finite `speed_kmh` (default 40) and optional traffic scenario. Returns route
   coordinates, distance, snapped endpoints, assumed speed, segment distances,
   speeds and durations, per-segment speed sources, and total ETA in seconds. With an
   event selected, route search minimizes ETA; without one it minimizes distance.
@@ -72,7 +76,7 @@ python -B -m unittest discover -s tests -v
 ```
 
 This opt-in suite verifies the simulated 12 km/h corridors and seeded two-road
-closures against the real TC01-TC03 routes and directed OSM edges. These are repeatable
+closures against the TC01-TC03 routes and directed OSM edges. These are repeatable
 test scenarios, not live or predicted traffic data.
 
 To verify the loading improvement, open browser DevTools Network and reload
