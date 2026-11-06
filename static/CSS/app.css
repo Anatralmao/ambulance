@@ -229,9 +229,10 @@ body[data-theme='light'] {
   z-index: 10;
   right: 28px;
   bottom: 24px;
-  width: min(520px, calc(100vw - 42px));
-  max-height: min(46vh, 400px);
-  overflow: hidden;
+  width: min(760px, calc(100vw - 42px));
+  max-height: calc(100% - 48px);
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 11.2px;
   background: var(--panel);
@@ -606,3 +607,4 @@ body[data-theme='light'] td:nth-child(5) { color: #000000; }
 .results-panel.is-collapsed { min-height: 0; }
 .results-panel.is-collapsed > :not(.results-head) { display: none; }
 .results-panel.is-collapsed .results-head { border-bottom: 0; }
+#traffic-result-note { margin: 10px 22px 0; color: var(--faint); font: 12px 'DM Mono', 'Segoe UI', Arial, monospace; line-height: 1.5; }
