@@ -544,3 +544,12 @@ body[data-theme='light'] td:nth-child(5) { color: #000000; }
 #scenario-note { color: var(--faint); font-size: 12px; line-height: 1.5; }
 #simulation-clock { font-variant-numeric: tabular-nums; }
 .replay-button:disabled { opacity: .5; cursor: default; }
+
+/* Session 2 (N4): segment colour legend, alternative route, route input line */
+.legend-seg { width: 22px; border-top: 4px solid var(--seg); border-radius: 2px; }
+.legend-alt { width: 22px; margin-left: 8px; border-top: 3px dashed var(--muted); }
+.results-panel tr.is-selected td { color: var(--text); font-weight: 700; }
+.results-panel tr:not(.is-selected) td { color: var(--muted); }
+.route-inputs, .route-compare { margin: 10px 22px 0; color: var(--muted); font: 13px 'DM Mono', 'Segoe UI', Arial, monospace; white-space: normal; }
+.route-compare { color: var(--text); }
+.route-inputs .mock-badge { margin-left: 6px; padding: 2px 8px; border-radius: 20px; color: #1a1300; background: #f2b33d; font-weight: 700; }
