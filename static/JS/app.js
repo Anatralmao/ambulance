@@ -946,9 +946,6 @@ async function loadTestCases() {
     const data = await apiJson("/api/test-cases");
     if (data && Array.isArray(data.cases)) {
       availableTestCases = data.cases;
-      byId("scenario-note").textContent = MOCK_MODE ?
-        "MOCK MODE: segment speeds are simulated for UI testing." :
-        "Traffic scenario is sent to the API; segment speeds come from the backend. Hospital locations are provisional.";
     } else if (Array.isArray(data)) {
       availableTestCases = data;
     }
@@ -1005,7 +1002,8 @@ async function loadTrafficScenarios() {
   } catch (error) {
     availableTrafficScenarios = [];
     trafficScenarioSelect.disabled = true;
-    byId("scenario-note").textContent = "Traffic scenarios unavailable; fixed-speed routing remains available.";
+    // Usually an old server process that predates /api/traffic-scenarios: restart it.
+    byId("scenario-note").textContent = "Traffic events unavailable (restart the server if the code was just updated); fixed-speed routing still works.";
     return;
   }
   updateTrafficScenarioNote();
