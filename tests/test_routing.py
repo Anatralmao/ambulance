@@ -41,6 +41,87 @@ class RoutingTests(unittest.TestCase):
                 self.assertAlmostEqual(result["distance_km"], 0.2)
                 self.assertEqual(len(result["coordinates"]), 3)
 
+            # Check whether the system preserves edge IDs and metadata
+    # when multiple road segments connect the same two nodes.
+    def test_parallel_edges_preserve_id_and_metadata(self):
+
+        # Create two parallel roads from A to B.
+        # The first road is shorter but slower.
+        # The second road is longer but faster.
+
+        self.data["roads"] = [
+            {
+                "id": "road_short_slow",
+                "from": "a",
+                "to": "b",
+                "distance_km": 0.1,
+                "speed_kmh": 5,
+                "bidirectional": False,
+                "metadata": {
+                    "name": "Duong ngan",
+                    "highway": "residential"
+                }
+            },
+            {
+                "id": "road_long_fast",
+                "from": "a",
+                "to": "b",
+                "distance_km": 0.2,
+                "speed_kmh": 40,
+                "bidirectional": False,
+                "metadata": {
+                    "name": "Duong nhanh",
+                    "highway": "primary"
+                }
+            }
+        ]
+
+        # Save the updated data to the JSON file.
+        self.path.write_text(json.dumps(self.data))
+
+        # Rebuild the road network using the updated data.
+        network = RoadNetwork(self.path)
+
+        # Case 1: Find the route with the shortest distance.
+        shortest = network.route(
+            self.point(0),
+            self.point(1),
+            "dijkstra",
+            speed_kmh=40,
+            objective="distance"
+        )
+
+        # Case 2: Find the route with the shortest travel time.
+        fastest = network.route(
+            self.point(0),
+            self.point(1),
+            "dijkstra",
+            speed_kmh=40,
+            objective="time"
+        )
+
+        # Verify that the system selects the correct road segment IDs.
+        self.assertEqual(
+            shortest["segment_edge_ids"],
+            ["road_short_slow"]
+        )
+
+        self.assertEqual(
+            fastest["segment_edge_ids"],
+            ["road_long_fast"]
+        )
+
+        # Verify that the metadata of each road segment is preserved.
+        self.assertEqual(
+            shortest["segment_edge_metadata"][0]["name"],
+            "Duong ngan"
+        )
+
+        self.assertEqual(
+            fastest["segment_edge_metadata"][0]["name"],
+            "Duong nhanh"
+        )
+
     def test_direction_and_unreachable_route(self):
         for algorithm in ("astar", "dijkstra"):
             self.assertIsNone(self.network.route(self.point(2), self.point(0), algorithm))

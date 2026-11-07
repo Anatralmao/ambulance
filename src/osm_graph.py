@@ -83,18 +83,47 @@ def build_graph(overpass_data):
             tags.get("oneway") in {"yes", "1", "true", "-1"}
             or tags.get("junction") == "roundabout"
         )
-        for source, target in zip(refs, refs[1:]):
+        # Iterate through each road segment between consecutive OSM nodes.
+        for segment_index, (source, target) in enumerate(
+            zip(refs, refs[1:])
+        ):
+
+            # Skip the road segment if either node is missing its coordinates.
             if source not in nodes or target not in nodes:
                 continue
+
+            # Calculate the distance between two nodes (in kilometers).
             distance = _distance_km(nodes[source], nodes[target])
+
+            # Check whether the distance is valid.
             if not math.isfinite(distance) or distance <= 0:
                 continue
+
+            # Add both nodes to the graph's node collection.
             graph_nodes.update((source, target))
+
+            # Generate a unique ID for each road segment.
+            # Combine the OSM way ID with the segment's position in the way.
+            edge_id = f"osm_way_{way['id']}_segment_{segment_index}"
+
+            # Store the metadata of the road segment.
+            edge_metadata = {
+                "way_id": way["id"],
+                "segment_index": segment_index,
+                "name": tags.get("name"),
+                "highway": tags.get("highway"),
+                "maxspeed": tags.get("maxspeed"),
+                "oneway": one_way
+            }
+
+            # Add the road segment to the map data.
             roads.append({
+                "id": edge_id,
                 "from": f"node_{source}",
                 "to": f"node_{target}",
                 "distance_km": distance,
                 "bidirectional": not one_way,
+                "metadata": edge_metadata
             })
     if not roads:
         raise ValueError("Overpass response contains no routable roads")

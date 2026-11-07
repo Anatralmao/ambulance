@@ -34,6 +34,8 @@ class SnappedPoint(Point):
 class RouteResponse(BaseModel):
     coordinates: list[tuple[float, float]]
     segment_edges: list[tuple[str, str]]
+    segment_edge_ids: list[str]
+    segment_edge_metadata: list[dict]
     distance_km: float
     start: SnappedPoint
     goal: SnappedPoint
