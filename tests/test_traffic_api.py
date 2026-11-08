@@ -340,6 +340,12 @@ class TrafficApiTests(unittest.TestCase):
                 self.assertEqual(set(result["segment_speeds_kmh"]), {40})
                 self.assertEqual(set(result["segment_speed_sources"]), {"no_live_data_assumed"})
                 self.assertIn("fixed seed", result["traffic_note"])
+                # Every closed edge comes with its two node coordinates, in the same order.
+                where = {node["id"]: [node["lat"], node["lng"]] for node in self.nodes}
+                self.assertEqual(
+                    result["traffic_event_edge_coordinates"],
+                    [[where[source], where[target]] for source, target in result["traffic_event_edges"]],
+                )
                 alternate_speed = self.post_route(start, goal, scenario_id, speed=25)
                 self.assertEqual(alternate_speed.status_code, 200)
                 self.assertEqual(alternate_speed.json()["speed_kmh"], 40)

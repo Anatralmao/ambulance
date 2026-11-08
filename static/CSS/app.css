@@ -608,3 +608,7 @@ body[data-theme='light'] td:nth-child(5) { color: #000000; }
 .results-panel.is-collapsed > :not(.results-head) { display: none; }
 .results-panel.is-collapsed .results-head { border-bottom: 0; }
 #traffic-result-note { margin: 10px 22px 0; color: var(--faint); font: 12px 'DM Mono', 'Segoe UI', Arial, monospace; line-height: 1.5; }
+
+/* Closed roads (traffic event): black bar with a white dashed core, plus a ✕ mark. */
+.legend-closed { width: 22px; margin-left: 8px; height: 6px; background: #111418; border-top: 2px dashed #fff; border-bottom: 2px solid #111418; box-sizing: content-box; }
+.closed-road-mark { display: grid; place-items: center; color: #fff; background: #111418; border: 2px solid #e34b45; border-radius: 50%; font: 700 12px/1 Arial, sans-serif; }

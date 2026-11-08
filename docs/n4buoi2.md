@@ -61,8 +61,11 @@ mục tiêu không so được. Giao diện N4 hiện tên đường của đo�
 40 km/h") từ `segment_edge_metadata`. Kiểm tra: 3 TC × 3 sự kiện × 40/15/60 km/h trên bản đồ thật,
 Fastest không chậm hơn Shortest, A* = Dijkstra.
 
-Còn mở: quyết định nguồn bản đồ (Overpass hay `hanoi_map.json`); vẽ đoạn bị đóng lên bản đồ
-(cần N2 trả tọa độ cạnh đóng); kịch bản sự kiện vẫn khai báo theo cặp node, nên khi có hai đường
+Cập nhật 08/11 (tối): API trả thêm `traffic_event_edge_coordinates`; bản đồ vẽ đường bị đóng
+(nét đen + dấu ✕, chú giải CLOSED) và đoạn tắc giờ cao điểm (viền đỏ chấm), kể cả khi tuyến né chúng.
+Kiểm tra trên bản đồ thật: 3 TC đều hiện 2 dấu ✕ khi đóng đường, 5 đoạn khi giờ cao điểm.
+
+Còn mở: quyết định nguồn bản đồ (Overpass hay `hanoi_map.json`); kịch bản sự kiện vẫn khai báo theo cặp node, nên khi có hai đường
 song song giữa cùng cặp node thì cả cặp bị coi là tắc.
 
 ## Quy ước đặt tên đã theo

@@ -53,6 +53,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 const initialPoints = [[21.0435, 105.8231], [21.0069, 105.8434]];
 let routeLayer = null;
 let alternativeLayer = null;
+let eventLayer = null;
 let availableTestCases = [];
 let availableTrafficScenarios = [];
 
@@ -231,6 +232,7 @@ function invalidateRoute() {
   if (davidMarker.startLatLng) davidMarker.setLatLng(davidMarker.startLatLng);
   if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
   if (alternativeLayer) { map.removeLayer(alternativeLayer); alternativeLayer = null; }
+  if (eventLayer) { map.removeLayer(eventLayer); eventLayer = null; }
   resultsPanel.hidden = true;
   byId("traffic-comparison").hidden = true;
   hideStartBase();
@@ -659,6 +661,32 @@ async function requestRoute(body) {
   return Traffic.normalize(raw);
 }
 
+// Roads affected by the traffic event, drawn even where the route avoids them:
+// closed roads in black with a ✕, peak-hour segments as a thin red outline.
+function drawTrafficEvent(route) {
+  const edges = Traffic.eventEdges(route);
+  if (!edges.length) return null;
+  const closed = route.traffic_event_type === "road_closure";
+  const group = L.featureGroup();
+  for (const [a, b] of edges) {
+    if (closed) {
+      L.polyline([a, b], { color: "#111418", weight: 9, opacity: 0.9, lineCap: "butt" }).addTo(group);
+      L.polyline([a, b], { color: "#ffffff", weight: 2, opacity: 0.9, dashArray: "4 6" }).addTo(group);
+    } else {
+      L.polyline([a, b], { color: Traffic.STATUS.jam.color, weight: 3, opacity: 0.85, dashArray: "2 6" }).addTo(group);
+    }
+  }
+  if (closed) {
+    for (const point of Traffic.closedRoadMarks(edges)) {
+      L.marker(point, {
+        interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "closed-road-mark", html: "✕", iconSize: [22, 22], iconAnchor: [11, 11] }),
+      }).addTo(group);
+    }
+  }
+  return group.addTo(map);
+}
+
 // Selected route: solid, coloured by segment status. Alternative: thinner dashed line in the
 // same colours, so a jam the fastest route avoids is still visible on the map.
 function drawColoredRoute(route, alternative = false) {
@@ -826,6 +854,7 @@ async function findRoute() {
       alternativeLayer = drawColoredRoute(other, true);
     }
     routeLayer = drawColoredRoute(result);
+    eventLayer = drawTrafficEvent(result);
 
     const bounds = routeLayer.getBounds();
     if (alternativeLayer) bounds.extend(alternativeLayer.getBounds());

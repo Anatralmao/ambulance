@@ -123,6 +123,7 @@ Response 200 (ví dụ trên fixture nhỏ, không phải kịch bản Hà Nội
   "traffic_event_count": 0,
   "traffic_event_seed": null,
   "traffic_event_edges": [],
+  "traffic_event_edge_coordinates": [],
   "traffic_note": "No live segment speeds; 40 km/h is assumed on every road."
 }
 ```
@@ -141,6 +142,9 @@ không có dùng tốc độ giả định của request (`speed_kmh`), kể c�
 `segment_speed_sources` là `simulated` hoặc `no_live_data_assumed`. Khi đóng đường,
 các cạnh bị chặn không xuất hiện trong route; mọi cạnh còn lại tiếp tục dùng tốc độ
 nền, mặc định 40 km/h.
+`traffic_event_edge_coordinates[i]` là `[[lat, lng], [lat, lng]]` của `traffic_event_edges[i]`
+(cùng thứ tự): đường bị đóng, hoặc đoạn tắc giờ cao điểm; rỗng khi không có sự kiện. Giao diện
+dùng nó để vẽ đường bị đóng (nét đen, dấu ✕) và đoạn tắc (viền đỏ chấm) kể cả khi tuyến né chúng.
 Tổng thời lượng đoạn bằng ETA.
 Không làm tròn ở backend. ETA không bao gồm đoạn nối từ tọa độ yêu cầu tới node snap.
 

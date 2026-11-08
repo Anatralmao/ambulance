@@ -97,3 +97,19 @@ test("A simulated jam stays red at a low assumed speed", () => {
     traffic_scenario_id: "traffic_jam_tc01" });
   assert.deepEqual(r.segment_status, ["jam", "free"]);
 });
+
+test("Closed-road coordinates: one mark per road, both directions merged", () => {
+  const ab = [[21.0, 105.0], [21.0, 105.001]];
+  const ba = [[21.0, 105.001], [21.0, 105.0]];
+  const far = [[21.01, 105.01], [21.01, 105.011]];
+  const route = { traffic_event_edge_coordinates: [ab, ba, far, "bad"] };
+  assert.equal(Traffic.eventEdges(route).length, 3);
+  assert.equal(Traffic.closedRoadMarks(Traffic.eventEdges(route)).length, 2);
+  assert.deepEqual(Traffic.eventEdges({}), []);
+});
+
+test("Mock closure reports the closed part of the main road", () => {
+  const r = Traffic.mockRoute(body("road_closure_tc01", "time"));
+  assert.ok(Traffic.eventEdges(r).length > 0);
+  assert.equal(Traffic.eventEdges(Traffic.mockRoute(body(null, "time"))).length, 0);
+});

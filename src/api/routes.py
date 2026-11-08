@@ -53,6 +53,7 @@ class RouteResponse(BaseModel):
     traffic_event_count: int
     traffic_event_seed: int | None
     traffic_event_edges: list[tuple[str, str]]
+    traffic_event_edge_coordinates: list[list[list[float]]] = []
     traffic_note: str
 
 

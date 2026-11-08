@@ -550,6 +550,7 @@ class RoadNetwork:
         if scenario is None:
             traffic_note = f"No live segment speeds; {route_speed_kmh:g} km/h is assumed on every road."
             traffic_event_edges = []
+            traffic_event_edge_coordinates = []
             traffic_event_count = 0
         else:
             affected_edges = (resolved_scenario["closed_edges"]
@@ -557,6 +558,11 @@ class RoadNetwork:
                               else resolved_scenario["event_edges"])
             traffic_event_edges = [
                 (str(self.ids[source]), str(self.ids[target]))
+                for source, target in affected_edges
+            ]
+            # Same order as traffic_event_edges, so the UI can draw closed/jammed roads.
+            traffic_event_edge_coordinates = [
+                [self.coordinates[source].tolist(), self.coordinates[target].tolist()]
                 for source, target in affected_edges
             ]
             if scenario.get("kind") == "road_closure":
@@ -601,6 +607,7 @@ class RoadNetwork:
             "traffic_event_count": traffic_event_count,
             "traffic_event_seed": scenario.get("random_seed") if scenario else None,
             "traffic_event_edges": traffic_event_edges,
+            "traffic_event_edge_coordinates": traffic_event_edge_coordinates,
             "traffic_note": traffic_note
         }
 

@@ -76,6 +76,23 @@
     return meta.name || (meta.highway ? String(meta.highway).replace(/_/g, " ") : "");
   }
 
+  // [[lat, lng], [lat, lng]] per affected edge; empty when the backend has no coordinates.
+  function eventEdges(route) {
+    const edges = route.traffic_event_edge_coordinates;
+    return Array.isArray(edges) ? edges.filter((edge) => Array.isArray(edge) && edge.length === 2) : [];
+  }
+
+  // One ✕ per closed road: both directions of a road share a midpoint, so marks closer
+  // than ~25 m are merged.
+  function closedRoadMarks(edges) {
+    const marks = [];
+    for (const [a, b] of edges) {
+      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (!marks.some((m) => Math.abs(m[0] - mid[0]) < 2.5e-4 && Math.abs(m[1] - mid[1]) < 2.5e-4)) marks.push(mid);
+    }
+    return marks;
+  }
+
   // Merge consecutive segments with the same status into one polyline to keep drawing light.
   function colorRuns(route) {
     const runs = [];
@@ -172,13 +189,18 @@
     const event = eventOfScenario(body.traffic_scenario_id);
     const main = buildMock(body, event, false);
     const detour = buildMock(body, event, true);
-    if (event === "road_closure") return detour;
-    if (body.objective !== "time") return main;
-    return detour.estimated_time_sec < main.estimated_time_sec ? detour : main;
+    // Affected part of the main road: its middle third (closed, or slowed at peak hour).
+    const n = main.coordinates.length - 1;
+    const affected = [];
+    for (let i = Math.floor(n / 3); i < Math.ceil(2 * n / 3); i++) affected.push([main.coordinates[i], main.coordinates[i + 1]]);
+    const pick = event === "road_closure" ? detour
+      : body.objective !== "time" ? main
+      : detour.estimated_time_sec < main.estimated_time_sec ? detour : main;
+    return Object.assign(pick, { traffic_event_edge_coordinates: event ? affected : [] });
   }
 
   return {
     EVENTS, OBJECTIVES, STATUS, labelOf, scenarioId, eventOfScenario, statusFor,
-    normalize, roadName, colorRuns, compare, sameRoute, mockRoute,
+    normalize, roadName, eventEdges, closedRoadMarks, colorRuns, compare, sameRoute, mockRoute,
   };
 });
