@@ -47,7 +47,7 @@ for (const event of Traffic.EVENTS) for (const o of Traffic.OBJECTIVES) {
     const id = Traffic.scenarioId(event.id, "TC01");
     const r = Traffic.normalize(Traffic.mockRoute(body(id, o.id)));
     const n = r.coordinates.length - 1;
-    for (const k of ["segment_distances_km", "segment_durations_sec", "segment_speeds_kmh", "segment_status", "segment_edges"])
+    for (const k of ["segment_distances_km", "segment_durations_sec", "segment_speeds_kmh", "segment_status", "segment_edges", "segment_edge_ids", "segment_edge_metadata"])
       assert.equal(r[k].length, n, k);
     assert.ok(Math.abs(sum(r.segment_durations_sec) - r.estimated_time_sec) < 1e-6);
     assert.equal(r.traffic_scenario_id, id);
@@ -80,4 +80,20 @@ test("colorRuns merges same-colour segments without losing points", () => {
   const runs = Traffic.colorRuns(r);
   assert.ok(runs.length >= 3);
   assert.equal(sum(runs.map((x) => x.coords.length - 1)), r.coordinates.length - 1);
+});
+
+test("roadName uses the OSM name, then the road type, else nothing", () => {
+  const route = { segment_edge_metadata: [{ name: "Phố Huế", highway: "primary" }, { highway: "living_street" }, {}] };
+  assert.equal(Traffic.roadName(route, 0), "Phố Huế");
+  assert.equal(Traffic.roadName(route, 1), "living street");
+  assert.equal(Traffic.roadName(route, 2), "");
+  assert.equal(Traffic.roadName({}, 0), "");
+});
+
+test("A simulated jam stays red at a low assumed speed", () => {
+  const r = Traffic.normalize({ coordinates: [[0, 0], [0, 1], [0, 2]], distance_km: 2, speed_kmh: 15,
+    segment_distances_km: [1, 1], segment_speeds_kmh: [12, 15], segment_durations_sec: [300, 240],
+    segment_speed_sources: ["simulated", "no_live_data_assumed"], estimated_time_sec: 540,
+    traffic_scenario_id: "traffic_jam_tc01" });
+  assert.deepEqual(r.segment_status, ["jam", "free"]);
 });

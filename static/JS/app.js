@@ -312,8 +312,10 @@ function advanceSimulation(deltaSeconds) {
     davidMarker.setLatLng([a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction]);
     setDavidSprite(true, b[1] < a[1] ? "left" : "right");
     const state = route.segment_status[index];
+    // Road name from the N3 edge metadata (OSM name, else road type), when the backend has it.
+    const road = Traffic.roadName(route, index);
     byId("current-segment").textContent =
-      `segment ${index + 1}/${route.segment_durations_sec.length} · ${route.segment_speeds_kmh[index].toFixed(1)} km/h · ${Traffic.STATUS[state].label}`;
+      `segment ${index + 1}/${route.segment_durations_sec.length}${road ? ` · ${road}` : ""} · ${route.segment_speeds_kmh[index].toFixed(1)} km/h · ${Traffic.STATUS[state].label}`;
   }
   updateSimulationControls();
   updateFindButton();
@@ -625,6 +627,8 @@ function renderResults(routes, selected, baseline = null) {
   byId("route-compare").textContent = !diff ? "" :
     Traffic.sameRoute(routes.distance, routes.time) || (Math.abs(diff.extra_km) < 0.005 && Math.abs(diff.saved_sec) < 0.5)
       ? "Both objectives give the same route in this scenario." :
+    diff.saved_sec > 0 && Math.abs(diff.extra_km) < 0.005 ? `The fastest route takes other roads of the same length and arrives ${formatDuration(diff.saved_sec)} earlier.` :
+    diff.saved_sec > 0 && diff.extra_km < 0 ? `The fastest route is ${(-diff.extra_km).toFixed(2)} km shorter and arrives ${formatDuration(diff.saved_sec)} earlier.` :
     diff.saved_sec > 0 ? `The fastest route is ${diff.extra_km.toFixed(2)} km longer but arrives ${formatDuration(diff.saved_sec)} earlier.` :
     `The shortest route is also the fastest (by ${formatDuration(-diff.saved_sec)}).`;
 

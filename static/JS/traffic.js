@@ -58,11 +58,22 @@
     const backendSpeeds = Array.isArray(route.segment_speeds_kmh) && route.segment_speeds_kmh.length === n;
     const speeds = backendSpeeds ? route.segment_speeds_kmh.slice() :
       route.segment_durations_sec.map((sec, i) => sec > 0 ? route.segment_distances_km[i] / sec * 3600 : base);
+    // A simulated traffic event slower than the assumed speed is always a jam, even when the
+    // assumed speed is low (12 of 15 km/h would otherwise count as free flow).
+    const sources = Array.isArray(route.segment_speed_sources) ? route.segment_speed_sources : [];
     return Object.assign({}, route, {
       segment_speeds_kmh: speeds,
-      segment_status: speeds.map((speed) => statusFor(speed, base)),
+      segment_status: speeds.map((speed, i) =>
+        sources[i] === "simulated" && speed < base ? "jam" : statusFor(speed, base)),
       traffic_applied: Boolean(route.traffic_scenario_id),
     });
+  }
+
+  // Display name of segment i from segment_edge_metadata: the road name, else its OSM type.
+  function roadName(route, i) {
+    const meta = Array.isArray(route.segment_edge_metadata) ? route.segment_edge_metadata[i] : null;
+    if (!meta) return "";
+    return meta.name || (meta.highway ? String(meta.highway).replace(/_/g, " ") : "");
   }
 
   // Merge consecutive segments with the same status into one polyline to keep drawing light.
@@ -133,12 +144,15 @@
     return {
       coordinates: coords,
       segment_edges: coords.slice(1).map((_, i) => [`${detour ? "detour" : "main"}-${i}`, `${detour ? "detour" : "main"}-${i + 1}`]),
+      segment_edge_ids: coords.slice(1).map((_, i) => `mock_${detour ? "detour" : "main"}_${i}`),
+      segment_edge_metadata: coords.slice(1).map(() => ({ name: detour ? "Mock detour" : "Mock main road", highway: detour ? "secondary" : "primary" })),
       distance_km: dist.reduce((s, x) => s + x, 0),
       start: { id: "mock-start", lat: body.start.lat, lng: body.start.lng, distance_meters: 0 },
       goal: { id: "mock-goal", lat: body.goal.lat, lng: body.goal.lng, distance_meters: 0 },
       algorithm: body.algorithm, objective: body.objective || "distance", speed_kmh: speed,
       segment_distances_km: dist,
       segment_speeds_kmh: speeds,
+      segment_speed_sources: speeds.map((v) => v < speed ? "simulated" : "no_live_data_assumed"),
       segment_durations_sec: durs,
       estimated_time_sec: durs.reduce((s, x) => s + x, 0),
       traffic_scenario_id: body.traffic_scenario_id || null,
@@ -165,6 +179,6 @@
 
   return {
     EVENTS, OBJECTIVES, STATUS, labelOf, scenarioId, eventOfScenario, statusFor,
-    normalize, colorRuns, compare, sameRoute, mockRoute,
+    normalize, roadName, colorRuns, compare, sameRoute, mockRoute,
   };
 });

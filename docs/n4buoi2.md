@@ -53,8 +53,17 @@ Kiểm tra trên bản đồ Hà Nội thật: `RUN_DATASET_TESTS=1` 3/3 pass; t
 Giờ cao điểm: tuyến nhanh nhất dài hơn nhưng nhanh hơn ở cả 3 TC (TC01 +0.07 km / −22.9 s,
 TC02 +0.04 km / −25.3 s, TC03 +0.01 km / −35.0 s). Đóng đường: đi vòng, +36 s đến +1 min 16 s.
 
-Còn mở: cạnh song song vẫn bị gộp trong `routing.py` (B02-04, N3); quyết định nguồn bản đồ
-(Overpass hay `hanoi_map.json`).
+Cập nhật 08/11 (gộp nhánh `n3-buoi2-time-routing` của Xuyến): cạnh song song có ID và metadata
+riêng (B02-04). Khi review sửa thêm 3 lỗi (có test): tìm đường theo thời gian luôn tính 40 km/h
+nên với Assumed speed khác (ví dụ 15 km/h) tuyến *Fastest* có thể chậm hơn *Shortest*; đường một
+chiều làm lệch cờ tốc độ riêng; tốc độ riêng của đường chỉ áp cho mục tiêu thời gian nên ETA hai
+mục tiêu không so được. Giao diện N4 hiện tên đường của đoạn đang chạy ("segment i/n · Phố Huế ·
+40 km/h") từ `segment_edge_metadata`. Kiểm tra: 3 TC × 3 sự kiện × 40/15/60 km/h trên bản đồ thật,
+Fastest không chậm hơn Shortest, A* = Dijkstra.
+
+Còn mở: quyết định nguồn bản đồ (Overpass hay `hanoi_map.json`); vẽ đoạn bị đóng lên bản đồ
+(cần N2 trả tọa độ cạnh đóng); kịch bản sự kiện vẫn khai báo theo cặp node, nên khi có hai đường
+song song giữa cùng cặp node thì cả cặp bị coi là tắc.
 
 ## Quy ước đặt tên đã theo
 
