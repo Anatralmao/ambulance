@@ -34,7 +34,7 @@ class RoadNetwork:
         cache = None
         if cache_dir is not None:
             stamp = path.stat()
-            cache = Path(cache_dir) / f"network-v2-{stamp.st_size}-{stamp.st_mtime_ns}.npz"
+            cache = Path(cache_dir) / f"network-v3-{stamp.st_size}-{stamp.st_mtime_ns}.npz"
             if cache.exists():
                 try:
                     with np.load(cache, allow_pickle=False) as saved:
@@ -59,6 +59,7 @@ class RoadNetwork:
                                 options, key=lambda edge: edge["distance_km"] / edge["speed_kmh"])
                     self.xyz = sphere_points(self.coordinates)
                     self.tree = cKDTree(self.xyz[self.active])
+                    self._prepare_time_weights()
                     self._resolved_traffic_scenarios = self._resolve_traffic_scenarios()
                     return
                 except (OSError, ValueError, KeyError, EOFError, BadZipFile):
@@ -128,7 +129,7 @@ class RoadNetwork:
                     edge_ids.append(edge_id)
                     edge_metadata.append(metadata)
                     edge_speeds.append(edge_speed)
-                edge_has_explicit_speed.append("speed_kmh" in road)
+                    edge_has_explicit_speed.append("speed_kmh" in road)
         # Convert the data to NumPy arrays for processing.
         starts = np.frombuffer(starts, dtype=np.int64)
         ends = np.frombuffer(ends, dtype=np.int64)
@@ -255,16 +256,51 @@ class RoadNetwork:
 
         time_nonzero = time_lengths > 0
 
-        # Ensure that the A* algorithm never underestimates the actual travel time.
+        # Admissible A* heuristic: never overestimate the remaining travel time.
         self.time_heuristic_scale = (
             float(np.min(time_costs[time_nonzero] / time_lengths[time_nonzero]))
             * (1 - 1e-12)
             if time_nonzero.any() else 0.0
         )
+        self._prepare_time_weights()
         self._resolved_traffic_scenarios = self._resolve_traffic_scenarios(lookup)
         del lookup
         if cache is not None:
             self._save_cache(cache)
+
+    def _prepare_time_weights(self):
+        """Per-entry data for time_graph, so each request can apply its assumed speed.
+
+        Roads without an explicit speed_kmh use the request's assumed speed, not
+        DEFAULT_SPEED_KMH; roads with one keep it. Parallel edges are chosen once at
+        DEFAULT_SPEED_KMH, which only matters when explicit and implicit speeds mix.
+        """
+        graph = self.time_graph
+        sources = np.repeat(np.arange(graph.shape[0]), np.diff(graph.indptr))
+        selection = self.edge_selection["time"]
+        km = np.empty(len(graph.data))
+        explicit = np.full(len(graph.data), np.nan)
+        for offset, (source, target) in enumerate(zip(sources.tolist(), graph.indices.tolist())):
+            edge = selection[(source, target)]
+            km[offset] = edge["distance_km"]
+            if edge.get("has_explicit_speed"):
+                explicit[offset] = edge["speed_kmh"]
+        self.time_edge_km = km
+        self.time_edge_explicit_speed = explicit
+        self.max_explicit_speed = float(np.nanmax(explicit)) if np.isfinite(explicit).any() else 0.0
+        lengths = np.linalg.norm(self.xyz[sources] - self.xyz[graph.indices], axis=1)
+        nonzero = lengths > 0
+        # km per unit chord; divided by the fastest speed it gives an admissible heuristic.
+        self.time_heuristic_km = (float(np.min(km[nonzero] / lengths[nonzero])) * (1 - 1e-12)
+                                  if nonzero.any() else 0.0)
+
+    def _time_graph_for(self, route_speed_kmh, scenario_speed=None):
+        speeds = np.where(np.isnan(self.time_edge_explicit_speed), route_speed_kmh,
+                          self.time_edge_explicit_speed)
+        graph = csr_matrix((self.time_edge_km / speeds * 3600, self.time_graph.indices.copy(),
+                            self.time_graph.indptr.copy()), shape=self.time_graph.shape)
+        fastest = max(route_speed_kmh, self.max_explicit_speed, scenario_speed or 0.0)
+        return graph, self.time_heuristic_km * 3600 / fastest
 
     def _save_cache(self, cache):
         temporary = None
@@ -378,8 +414,8 @@ class RoadNetwork:
         goal_index, goal_point = self.nearest(goal.lat, goal.lng)
         # Select the graph matching the requested objective.
         if resolved_objective == "time":
-            search_graph = self.time_graph
-            heuristic_scale = self.time_heuristic_scale
+            # Built per request: implicit-speed roads follow the assumed speed.
+            search_graph, heuristic_scale = self._time_graph_for(route_speed_kmh, scenario_speed)
         else:
             search_graph = self.graph
             heuristic_scale = self.heuristic_scale
@@ -490,12 +526,10 @@ class RoadNetwork:
             for source, target in zip(path, path[1:])
         ]
 
-        # Legacy behavior: distance routes use the requested fixed speed.
-        # Time routes use a road's speed when explicitly present in the data.
+        # A road's own speed applies to both objectives, so their ETAs are comparable;
+        # roads without one use the assumed speed.
         segment_speeds = [
-            float(edge["speed_kmh"])
-            if resolved_objective == "time" and edge.get("has_explicit_speed")
-            else float(route_speed_kmh)
+            float(edge["speed_kmh"]) if edge.get("has_explicit_speed") else float(route_speed_kmh)
             for edge in segment_edge_records
         ]
         if scenario is not None and scenario_speed is not None and scenario.get("kind") != "road_closure":

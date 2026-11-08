@@ -103,6 +103,9 @@ Response 200 (ví dụ trên fixture nhỏ, không phải kịch bản Hà Nội
 {
   "coordinates": [[21, 105], [21, 105.001]],
   "segment_edges": [["a", "b"]],
+  "segment_edge_ids": ["osm_way_123_segment_0"],
+  "segment_edge_metadata": [{"way_id": 123, "segment_index": 0, "name": "Phố Huế",
+                             "highway": "primary", "maxspeed": null, "oneway": false}],
   "distance_km": 0.2,
   "start": {"id": "a", "lat": 21, "lng": 105, "distance_meters": 0},
   "goal": {"id": "b", "lat": 21, "lng": 105.001, "distance_meters": 0},
@@ -127,6 +130,13 @@ Response 200 (ví dụ trên fixture nhỏ, không phải kịch bản Hà Nội
 Đoạn thứ i nối `coordinates[i]` tới `coordinates[i+1]`. Các mảng `segment_*` có
 độ dài `len(coordinates)-1`; khoảng cách lấy từ cạnh đồ thị, không đo lại từ polyline.
 `segment_edges[i]` giữ cặp node có hướng `[from_node_id, to_node_id]` của đoạn tương ứng.
+`segment_edge_ids[i]` là ID con đường thật đã chọn (`osm_way_<way>_segment_<i>` với bản đồ
+Overpass; `road_<n>` nếu dữ liệu không có `id`), nên phân biệt được hai đường song song nối
+cùng cặp node. `segment_edge_metadata[i]` là thông tin OSM của đường đó (`name`, `highway`,
+`maxspeed`, `oneway`...; có thể rỗng). Cạnh song song: mục tiêu `distance` chọn đường ngắn
+nhất, `time` chọn đường nhanh nhất giữa cùng cặp node.
+Đường có `speed_kmh` riêng trong dữ liệu bản đồ dùng tốc độ đó cho cả hai mục tiêu; đường
+không có dùng tốc độ giả định của request (`speed_kmh`), kể cả khi tìm đường theo thời gian.
 `segment_durations_sec[i] = segment_distances_km[i] / segment_speeds_kmh[i] * 3600`.
 `segment_speed_sources` là `simulated` hoặc `no_live_data_assumed`. Khi đóng đường,
 các cạnh bị chặn không xuất hiện trong route; mọi cạnh còn lại tiếp tục dùng tốc độ

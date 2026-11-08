@@ -41,6 +41,43 @@ class RoutingTests(unittest.TestCase):
                 self.assertAlmostEqual(result["distance_km"], 0.2)
                 self.assertEqual(len(result["coordinates"]), 3)
 
+    def _network(self, nodes, roads):
+        self.data = {"nodes": nodes, "roads": roads}
+        self.path.write_text(json.dumps(self.data))
+        return RoadNetwork(self.path)
+
+    def test_explicit_speed_survives_one_way_roads(self):
+        # A one-way road listed first must not shift the explicit-speed flags.
+        network = self._network(
+            [{"id": "a", "lat": 21, "lng": 105}, {"id": "b", "lat": 21, "lng": 105.001},
+             {"id": "c", "lat": 21, "lng": 105.002}],
+            [{"id": "r1", "from": "a", "to": "b", "distance_km": 1.0, "bidirectional": False},
+             {"id": "r2", "from": "b", "to": "c", "distance_km": 1.0, "speed_kmh": 10}],
+        )
+        result = network.route(self.point(0), self.point(2), "dijkstra", speed_kmh=40, objective="time")
+        self.assertEqual(result["segment_speeds_kmh"], [40.0, 10.0])
+        self.assertAlmostEqual(result["estimated_time_sec"], 90 + 360)
+
+    def test_time_routing_uses_assumed_speed(self):
+        # Direct road: 1.0 km at an explicit 12 km/h. Detour: 1.2 km at the assumed speed.
+        network = self._network(
+            [{"id": "a", "lat": 21, "lng": 105}, {"id": "d", "lat": 21, "lng": 105.004},
+             {"id": "c", "lat": 21.002, "lng": 105.002}],
+            [{"id": "direct", "from": "a", "to": "d", "distance_km": 1.0, "speed_kmh": 12},
+             {"id": "via1", "from": "a", "to": "c", "distance_km": 0.6},
+             {"id": "via2", "from": "c", "to": "d", "distance_km": 0.6}],
+        )
+        for speed, expected in ((40, ["via1", "via2"]), (10, ["direct"])):
+            for algorithm in ("astar", "dijkstra"):
+                with self.subTest(speed=speed, algorithm=algorithm):
+                    fastest = network.route(self.point(0), self.point(1), algorithm,
+                                            speed_kmh=speed, objective="time")
+                    shortest = network.route(self.point(0), self.point(1), algorithm,
+                                             speed_kmh=speed, objective="distance")
+                    self.assertEqual(fastest["segment_edge_ids"], expected)
+                    self.assertLessEqual(fastest["estimated_time_sec"],
+                                         shortest["estimated_time_sec"] + 1e-9)
+
             # Check whether the system preserves edge IDs and metadata
     # when multiple road segments connect the same two nodes.
     def test_parallel_edges_preserve_id_and_metadata(self):
