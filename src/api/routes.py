@@ -2,10 +2,14 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from src.scenarios import TEST_CASES
+from src.scenarios import TEST_CASES, TRAFFIC_SCENARIOS
 from src.routing import DEFAULT_SPEED_KMH
 
 router = APIRouter(prefix="/api")
+TrafficScenarioId = Literal[
+    "traffic_jam_tc01", "traffic_jam_tc02", "traffic_jam_tc03",
+    "road_closure_tc01", "road_closure_tc02", "road_closure_tc03",
+]
 
 
 class Point(BaseModel):
@@ -18,6 +22,8 @@ class RouteRequest(BaseModel):
     goal: Point
     algorithm: Literal["astar", "dijkstra"] = "astar"
     speed_kmh: float = Field(default=DEFAULT_SPEED_KMH, gt=0, allow_inf_nan=False)
+    traffic_scenario_id: TrafficScenarioId | None = None
+    objective: Literal["distance", "time"] | None = None
 
 
 class SnappedPoint(Point):
@@ -27,14 +33,28 @@ class SnappedPoint(Point):
 
 class RouteResponse(BaseModel):
     coordinates: list[tuple[float, float]]
+    segment_edges: list[tuple[str, str]]
+    segment_edge_ids: list[str]
+    segment_edge_metadata: list[dict]
     distance_km: float
     start: SnappedPoint
     goal: SnappedPoint
     algorithm: Literal["astar", "dijkstra"]
+    objective: Literal["distance", "time"]
     speed_kmh: float
     segment_distances_km: list[float]
+    segment_speeds_kmh: list[float]
+    segment_speed_sources: list[Literal["simulated", "no_live_data_assumed"]]
     segment_durations_sec: list[float]
     estimated_time_sec: float
+    traffic_scenario_id: TrafficScenarioId | None
+    traffic_event_type: Literal["peak_congestion", "road_closure"] | None
+    traffic_event_speed_kmh: float | None
+    traffic_event_count: int
+    traffic_event_seed: int | None
+    traffic_event_edges: list[tuple[str, str]]
+    traffic_event_edge_coordinates: list[list[list[float]]] = []
+    traffic_note: str
 
 
 def network(request):
@@ -61,7 +81,14 @@ def nearest(request: Request, lat: float = Query(ge=-90, le=90),
 def route(body: RouteRequest, request: Request):
     road_network = network(request)
     try:
-        result = road_network.route(body.start, body.goal, body.algorithm, body.speed_kmh)
+        result = road_network.route(
+            body.start,
+            body.goal,
+            body.algorithm,
+            body.speed_kmh,
+            body.traffic_scenario_id,
+            body.objective,
+        )
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
     if result is None:
@@ -72,3 +99,22 @@ def route(body: RouteRequest, request: Request):
 @router.get("/test-cases")
 def get_test_cases():
     return TEST_CASES
+
+
+@router.get("/traffic-scenarios")
+def get_traffic_scenarios():
+    return [
+        {
+            "id": scenario["id"],
+            "label": scenario["label"],
+            "description": scenario["description"],
+            "route_case_id": scenario["route_case_id"],
+            "kind": scenario["kind"],
+            "event_edges": [list(edge) for edge in scenario.get("event_edges", ())],
+            "candidate_edges": [list(edge) for edge in scenario.get("candidate_edges", ())],
+            "closed_road_count": scenario.get("closed_road_count", 0),
+            "random_seed": scenario.get("random_seed"),
+            "speed_kmh": scenario.get("speed_kmh"),
+        }
+        for scenario in TRAFFIC_SCENARIOS.values()
+    ]

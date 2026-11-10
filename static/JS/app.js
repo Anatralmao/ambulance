@@ -2,6 +2,7 @@ let sessions = loadSessions();
 
 const byId = (id) => document.getElementById(id);
 const testCaseSelect = byId("test-case");
+const trafficScenarioSelect = byId("traffic-scenario");
 const algorithmSelect = byId("algorithm");
 const findButton = byId("find-route");
 const status = byId("route-status");
@@ -12,12 +13,11 @@ const resultsPanel = byId("results-panel");
 const closeResultsButton = byId("close-results");
 const replayRouteButton = byId("replay-route");
 const resetDavidButton = byId("reset-david");
-const scenarioSelect = byId("traffic-scenario");
 const objectiveSelect = byId("objective");
-// ?mock=1 uses mock data from traffic.js until the session 2 API (N2/N3) is ready.
+// ?mock=1 replaces the API with mock data from traffic.js (UI testing without the road network).
 const MOCK_MODE = new URLSearchParams(location.search).get("mock") === "1";
-scenarioSelect.innerHTML = Traffic.SCENARIOS.map(item => `<option value="${item.id}">${item.label}</option>`).join("");
-objectiveSelect.innerHTML = Traffic.OBJECTIVES.map(item => `<option value="${item.id}">${item.label}</option>`).join("");
+trafficScenarioSelect.innerHTML = Traffic.EVENTS.map(item => `<option value="${item.id}">${escapeHtml(item.label)}</option>`).join("");
+objectiveSelect.innerHTML = Traffic.OBJECTIVES.map(item => `<option value="${item.id}">${escapeHtml(item.label)}</option>`).join("");
 objectiveSelect.value = "time";
 
 if (closeResultsButton) {
@@ -31,8 +31,8 @@ for (const button of document.querySelectorAll(".collapse-button")) {
   button.addEventListener("click", () => {
     const panel = button.closest(".control-panel, .results-panel");
     // Pin the header where it is: the results panel is anchored to the bottom by default.
-    const shellTop = document.querySelector(".app-shell").getBoundingClientRect().top;
-    panel.style.top = `${panel.getBoundingClientRect().top - shellTop}px`;
+    const { rect: shellRect, scale } = shellGeometry();
+    panel.style.top = `${(panel.getBoundingClientRect().top - shellRect.top) / scale}px`;
     panel.style.bottom = "auto";
     const collapsed = panel.classList.toggle("is-collapsed");
     const name = button.dataset.collapse === "control" ? "route planner" : "route results";
@@ -53,7 +53,9 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 const initialPoints = [[21.0435, 105.8231], [21.0069, 105.8434]];
 let routeLayer = null;
 let alternativeLayer = null;
+let eventLayer = null;
 let availableTestCases = [];
+let availableTrafficScenarios = [];
 
 // =========================================================
 // David Avatar & Marker Configuration
@@ -230,7 +232,9 @@ function invalidateRoute() {
   if (davidMarker.startLatLng) davidMarker.setLatLng(davidMarker.startLatLng);
   if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
   if (alternativeLayer) { map.removeLayer(alternativeLayer); alternativeLayer = null; }
+  if (eventLayer) { map.removeLayer(eventLayer); eventLayer = null; }
   resultsPanel.hidden = true;
+  byId("traffic-comparison").hidden = true;
   hideStartBase();
   hideDavidSpeech();
   updateSimulationControls();
@@ -310,8 +314,10 @@ function advanceSimulation(deltaSeconds) {
     davidMarker.setLatLng([a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction]);
     setDavidSprite(true, b[1] < a[1] ? "left" : "right");
     const state = route.segment_status[index];
+    // Road name from the N3 edge metadata (OSM name, else road type), when the backend has it.
+    const road = Traffic.roadName(route, index);
     byId("current-segment").textContent =
-      `segment ${index + 1}/${route.segment_durations_sec.length} · ${route.segment_speeds_kmh[index].toFixed(1)} km/h · ${Traffic.STATUS[state].label}`;
+      `segment ${index + 1}/${route.segment_durations_sec.length}${road ? ` · ${road}` : ""} · ${route.segment_speeds_kmh[index].toFixed(1)} km/h · ${Traffic.STATUS[state].label}`;
   }
   updateSimulationControls();
   updateFindButton();
@@ -393,6 +399,9 @@ function startMarkerDrag(event) {
   if (routingBusy || isDavidRunning) return;
   invalidateRoute();
   testCaseSelect.value = "custom";
+  trafficScenarioSelect.value = "";
+  syncClosureSpeedControl();
+  updateTrafficScenarioNote();
   activeMarker = event.target;
   activeMarker.snapVersion = (activeMarker.snapVersion || 0) + 1;
   delete activeMarker.options.graphNodeId;
@@ -566,7 +575,7 @@ function renderHistory() {
       <span class="history-entry-index">${count - index}</span>
       <div class="history-entry-main">
         <div class="history-entry-case" title="${escapeHtml(session.testCase)}">${escapeHtml(session.testCase)}</div>
-        <div class="history-entry-meta">${escapeHtml(session.algorithm)}${session.scenario ? ` &middot; ${escapeHtml(Traffic.labelOf(Traffic.SCENARIOS, session.scenario))} / ${escapeHtml(session.objective)}` : ""} &middot; ${escapeHtml(session.timestamp)}</div>
+        <div class="history-entry-meta">${escapeHtml(session.algorithm)}${session.objective ? ` &middot; ${escapeHtml(Traffic.labelOf(Traffic.EVENTS, Traffic.eventOfScenario(session.scenario)))} / ${escapeHtml(Traffic.labelOf(Traffic.OBJECTIVES, session.objective))}` : ""} &middot; ${escapeHtml(session.timestamp)}</div>
       </div>
       <span class="history-entry-meta">${session.routes}R</span>
     </article>`).join("");
@@ -583,8 +592,14 @@ function formatDuration(sec) {
   return minutes ? `${minutes} min ${(sec % 60).toFixed(0)} s` : `${sec.toFixed(1)} s`;
 }
 
-// routes = { distance, time }; selected = the chosen objective (the route the vehicle runs).
-function renderResults(routes, selected) {
+function speedSummary(route) {
+  const speeds = [...new Set(route.segment_speeds_kmh.map(speed => Number(speed.toFixed(1))))].sort((x, y) => x - y);
+  return speeds.length ? `${speeds.join(" / ")} km/h` : `${route.speed_kmh} km/h`;
+}
+
+// routes = { distance, time }; selected = the chosen objective (the route David runs);
+// baseline = the same objective with no traffic event, when an event is selected.
+function renderResults(routes, selected, baseline = null) {
   resultBody.innerHTML = Traffic.OBJECTIVES.map(({ id }) => {
     const route = routes[id];
     if (!route) return `<tr><td>${escapeHtml(Traffic.labelOf(Traffic.OBJECTIVES, id))}</td><td colspan="5">Route unavailable</td></tr>`;
@@ -593,29 +608,48 @@ function renderResults(routes, selected) {
     return `<tr class="${id === selected ? "is-selected" : ""}">
       <td>${id === selected ? "▶ " : ""}${escapeHtml(Traffic.labelOf(Traffic.OBJECTIVES, id))}</td>
       <td>${route.distance_km.toFixed(2)} km</td><td>${escapeHtml(route.algorithm)}</td>
-      <td>${formatDuration(route.estimated_time_sec)}</td><td>${route.speed_kmh} km/h</td>
+      <td>${formatDuration(route.estimated_time_sec)}</td><td>${escapeHtml(speedSummary(route))}</td>
       <td>${jam} / ${slow}</td></tr>`;
   }).join("");
 
   const main = routes[selected];
+  const event = Traffic.eventOfScenario(main.traffic_scenario_id);
+  const isClosure = main.traffic_event_type === "road_closure";
+  const eventDetail = !main.traffic_scenario_id ? "" : isClosure
+    ? ` · ${main.traffic_event_count} roads closed, seed ${escapeHtml(main.traffic_event_seed)}`
+    : ` · ${main.traffic_event_speed_kmh} km/h on ${main.traffic_event_count} segments`;
   const source = main.mock ? '<span class="mock-badge">MOCK DATA</span>' :
-    main.traffic_applied ? "API" : "API (no traffic data — fixed speed)";
+    main.traffic_applied ? "API, simulated traffic" : "API, fixed speed (no event)";
   byId("route-inputs").innerHTML =
-    `Inputs: traffic <b>${escapeHtml(Traffic.labelOf(Traffic.SCENARIOS, main.scenario_id || scenarioSelect.value))}</b>` +
-    ` · objective <b>${escapeHtml(Traffic.labelOf(Traffic.OBJECTIVES, selected))}</b>` +
-    ` · snapshot ${escapeHtml(main.snapshot_id || "—")} · source ${source}`;
+    `Inputs: <b>${escapeHtml(testCaseSelect.value === "custom" ? "Custom route" : testCaseSelect.value)}</b>` +
+    ` · traffic <b>${escapeHtml(Traffic.labelOf(Traffic.EVENTS, event))}</b>${eventDetail}` +
+    ` · objective <b>${escapeHtml(Traffic.labelOf(Traffic.OBJECTIVES, selected))}</b> · source ${source}`;
 
   const diff = Traffic.compare(routes.distance, routes.time);
   byId("route-compare").textContent = !diff ? "" :
-    Math.abs(diff.extra_km) < 0.005 && Math.abs(diff.saved_sec) < 0.5 ? "Both objectives give the same route in this scenario." :
+    Traffic.sameRoute(routes.distance, routes.time) || (Math.abs(diff.extra_km) < 0.005 && Math.abs(diff.saved_sec) < 0.5)
+      ? "Both objectives give the same route in this scenario." :
+    diff.saved_sec > 0 && Math.abs(diff.extra_km) < 0.005 ? `The fastest route takes other roads of the same length and arrives ${formatDuration(diff.saved_sec)} earlier.` :
+    diff.saved_sec > 0 && diff.extra_km < 0 ? `The fastest route is ${(-diff.extra_km).toFixed(2)} km shorter and arrives ${formatDuration(diff.saved_sec)} earlier.` :
     diff.saved_sec > 0 ? `The fastest route is ${diff.extra_km.toFixed(2)} km longer but arrives ${formatDuration(diff.saved_sec)} earlier.` :
     `The shortest route is also the fastest (by ${formatDuration(-diff.saved_sec)}).`;
+
+  const comparison = byId("traffic-comparison");
+  comparison.hidden = !baseline;
+  if (baseline) {
+    const etaDelta = main.estimated_time_sec - baseline.estimated_time_sec;
+    const distanceDelta = main.distance_km - baseline.distance_km;
+    comparison.textContent =
+      `Without the event: ${formatDuration(baseline.estimated_time_sec)}, ${baseline.distance_km.toFixed(2)} km. ` +
+      `With it: ${formatDuration(main.estimated_time_sec)}, ${main.distance_km.toFixed(2)} km ` +
+      `(${etaDelta >= 0 ? "+" : "−"}${formatDuration(Math.abs(etaDelta))}; ${distanceDelta >= 0 ? "+" : "−"}${Math.abs(distanceDelta).toFixed(2)} km). ` +
+      `Route changed: ${Traffic.sameRoute(main, baseline) ? "no" : "yes"}.`;
+  }
+  const closedEdges = isClosure && main.traffic_event_edges.length
+    ? ` Closed directed edges: ${main.traffic_event_edges.map((edge) => edge.join(" → ")).join(", ")}.`
+    : "";
+  byId("traffic-result-note").textContent = (main.traffic_note || "") + closedEdges;
   resultsPanel.hidden = false;
-  resultsPanel.style.position = "fixed";
-  resultsPanel.style.right = "28px";
-  resultsPanel.style.bottom = "24px";
-  resultsPanel.style.left = "auto";
-  resultsPanel.style.top = "auto";
 }
 
 async function requestRoute(body) {
@@ -627,12 +661,41 @@ async function requestRoute(body) {
   return Traffic.normalize(raw);
 }
 
-function drawColoredRoute(route) {
+// Roads affected by the traffic event, drawn even where the route avoids them:
+// closed roads in black with a ✕, peak-hour segments as a thin red outline.
+function drawTrafficEvent(route) {
+  const edges = Traffic.eventEdges(route);
+  if (!edges.length) return null;
+  const closed = route.traffic_event_type === "road_closure";
+  const group = L.featureGroup();
+  for (const [a, b] of edges) {
+    if (closed) {
+      L.polyline([a, b], { color: "#111418", weight: 9, opacity: 0.9, lineCap: "butt" }).addTo(group);
+      L.polyline([a, b], { color: "#ffffff", weight: 2, opacity: 0.9, dashArray: "4 6" }).addTo(group);
+    } else {
+      L.polyline([a, b], { color: Traffic.STATUS.jam.color, weight: 3, opacity: 0.85, dashArray: "2 6" }).addTo(group);
+    }
+  }
+  if (closed) {
+    for (const point of Traffic.closedRoadMarks(edges)) {
+      L.marker(point, {
+        interactive: false, keyboard: false,
+        icon: L.divIcon({ className: "closed-road-mark", html: "✕", iconSize: [22, 22], iconAnchor: [11, 11] }),
+      }).addTo(group);
+    }
+  }
+  return group.addTo(map);
+}
+
+// Selected route: solid, coloured by segment status. Alternative: thinner dashed line in the
+// same colours, so a jam the fastest route avoids is still visible on the map.
+function drawColoredRoute(route, alternative = false) {
   const group = L.featureGroup();
   for (const run of Traffic.colorRuns(route)) {
-    L.polyline(run.coords, {
-      color: Traffic.STATUS[run.status].color, weight: 6, opacity: 0.95, lineCap: "round", lineJoin: "round",
-    }).addTo(group);
+    L.polyline(run.coords, alternative
+      ? { color: Traffic.STATUS[run.status].color, weight: 4, opacity: 0.7, dashArray: "8 8" }
+      : { color: Traffic.STATUS[run.status].color, weight: 6, opacity: 0.95, lineCap: "round", lineJoin: "round" },
+    ).addTo(group);
   }
   return group.addTo(map);
 }
@@ -651,6 +714,13 @@ function setTheme(theme) {
 }
 
 // Make a panel draggable using its header as the handle
+// The app shell may be scaled with CSS (--ui-scale); convert screen pixels to layout pixels.
+function shellGeometry() {
+  const shell = document.querySelector(".app-shell");
+  const rect = shell.getBoundingClientRect();
+  return { rect, scale: rect.width / shell.offsetWidth || 1, width: shell.offsetWidth, height: shell.offsetHeight };
+}
+
 function makeDraggable(panel, handle) {
   let dragging = false;
   let offsetX = 0;
@@ -660,18 +730,16 @@ function makeDraggable(panel, handle) {
     if (event.button !== 0) return;
     if (event.target.closest("button")) return;
 
+    const { rect: shellRect, scale } = shellGeometry();
     const panelRect = panel.getBoundingClientRect();
-    const shellRect = document
-      .querySelector(".app-shell")
-      .getBoundingClientRect();
 
-    panel.style.left = `${panelRect.left - shellRect.left}px`;
-    panel.style.top = `${panelRect.top - shellRect.top}px`;
+    panel.style.left = `${(panelRect.left - shellRect.left) / scale}px`;
+    panel.style.top = `${(panelRect.top - shellRect.top) / scale}px`;
     panel.style.right = "auto";
     panel.style.bottom = "auto";
 
-    offsetX = event.clientX - panelRect.left;
-    offsetY = event.clientY - panelRect.top;
+    offsetX = (event.clientX - panelRect.left) / scale;
+    offsetY = (event.clientY - panelRect.top) / scale;
 
     dragging = true;
     panel.classList.add("is-dragging");
@@ -683,30 +751,11 @@ function makeDraggable(panel, handle) {
   handle.addEventListener("pointermove", (event) => {
     if (!dragging) return;
 
-    const shellRect = document
-      .querySelector(".app-shell")
-      .getBoundingClientRect();
-
-    const panelRect = panel.getBoundingClientRect();
-
-    const maxX = shellRect.width - panelRect.width;
-    const maxY = shellRect.height - panelRect.height;
-
-    const x = Math.max(
-      0,
-      Math.min(
-        event.clientX - shellRect.left - offsetX,
-        maxX
-      )
-    );
-
-    const y = Math.max(
-      0,
-      Math.min(
-        event.clientY - shellRect.top - offsetY,
-        maxY
-      )
-    );
+    const { rect: shellRect, scale, width, height } = shellGeometry();
+    const maxX = width - panel.offsetWidth;
+    const maxY = height - panel.offsetHeight;
+    const x = Math.max(0, Math.min((event.clientX - shellRect.left) / scale - offsetX, maxX));
+    const y = Math.max(0, Math.min((event.clientY - shellRect.top) / scale - offsetY, maxY));
 
     panel.style.left = `${x}px`;
     panel.style.top = `${y}px`;
@@ -722,7 +771,6 @@ function makeDraggable(panel, handle) {
   handle.addEventListener("lostpointercapture", stopDragging);
 }
 
-// Enable dragging for panels
 makeDraggable(
   document.querySelector(".control-panel"),
   document.querySelector(".panel-heading")
@@ -733,6 +781,11 @@ makeDraggable(
   document.querySelector(".history-window-head")
 );
 
+makeDraggable(
+  document.querySelector(".results-panel"),
+  document.querySelector(".results-head")
+);
+
 async function findRoute() {
   if (!networkReady || routingBusy || isDavidRunning || pendingSnaps || activeMarker) return;
   vehicleSpeed.setCustomValidity(Number(vehicleSpeed.value) > 0 && Number.isFinite(Number(vehicleSpeed.value)) ? "" : "Speed must be finite and greater than zero.");
@@ -740,6 +793,7 @@ async function findRoute() {
   invalidateRoute();
   const version = routeVersion;
   const selectedCase = testCaseSelect.value;
+  const selectedTrafficScenario = getSelectedTrafficScenario();
   routingBusy = true;
   updateFindButton();
   byId("button-text").textContent = "Computing route...";
@@ -760,14 +814,18 @@ async function findRoute() {
     const goal = { lat: goalPoint.lat, lng: goalPoint.lng };
 
     const selected = objectiveSelect.value;
-    const base = {
-      start, goal, algorithm: algorithmSelect.value, speed_kmh: Number(vehicleSpeed.value),
-      scenario_id: scenarioSelect.value,
+    const requestBody = {
+      start, goal, algorithm: algorithmSelect.value,
+      speed_kmh: Number(vehicleSpeed.value),
+      traffic_scenario_id: selectedTrafficScenario?.id || null,
     };
-    // Request both objectives for comparison; the selected objective is the route the vehicle runs.
-    const settled = await Promise.allSettled(
-      Traffic.OBJECTIVES.map(({ id }) => requestRoute({ ...base, objective: id })));
-
+    // Both objectives for the comparison table, plus the selected objective without the
+    // event (baseline) so the effect of the traffic event is visible.
+    const requests = Traffic.OBJECTIVES.map(({ id }) => requestRoute({ ...requestBody, objective: id }));
+    if (selectedTrafficScenario) {
+      requests.push(requestRoute({ ...requestBody, traffic_scenario_id: null, objective: selected }));
+    }
+    const settled = await Promise.allSettled(requests);
     if (version !== routeVersion) return;
     const routes = {};
     Traffic.OBJECTIVES.forEach(({ id }, i) => {
@@ -776,6 +834,7 @@ async function findRoute() {
     const result = routes[selected];
     if (!result) throw settled[Traffic.OBJECTIVES.findIndex(({ id }) => id === selected)].reason;
     const other = routes[selected === "time" ? "distance" : "time"];
+    const baselineResult = selectedTrafficScenario && settled[2].status === "fulfilled" ? settled[2].value : null;
 
     // Update markers to snap locations
     davidMarker.setLatLng([result.start.lat, result.start.lng]);
@@ -790,28 +849,29 @@ async function findRoute() {
       updateAddressBar(marker.options.positionKey, position.lat, position.lng);
     });
 
-    // Alternative: faint dashed line; selected route: coloured by segment status.
-    if (other) {
-      alternativeLayer = L.polyline(other.coordinates, {
-        color: "#90a5b5", weight: 4, opacity: 0.8, dashArray: "8 8",
-      }).addTo(map);
+    // Alternative objective: faint dashed line; selected route: coloured by segment status.
+    if (other && !Traffic.sameRoute(other, result)) {
+      alternativeLayer = drawColoredRoute(other, true);
     }
     routeLayer = drawColoredRoute(result);
+    eventLayer = drawTrafficEvent(result);
 
     const bounds = routeLayer.getBounds();
     if (alternativeLayer) bounds.extend(alternativeLayer.getBounds());
     map.fitBounds(bounds, { padding: [90, 90], maxZoom: 14 });
-    renderResults(routes, selected);
+    renderResults(routes, selected, baselineResult);
 
     sessions.push({
-      testCase: selectedCase || "Custom marker route",
-      scenario: result.scenario_id || scenarioSelect.value,
+      testCase: selectedTrafficScenario
+        ? `${selectedCase} - ${result.traffic_event_type === "road_closure" ? "Road closure" : "Peak-hour traffic 12 km/h"}`
+        : selectedCase || "Custom marker route",
+      scenario: result.traffic_scenario_id,
       objective: selected,
       algorithm: result.algorithm,
       speed_kmh: result.speed_kmh,
       estimated_time_sec: result.estimated_time_sec,
       timestamp: new Date().toLocaleString(),
-      routes: Object.keys(routes).length,
+      routes: Object.keys(routes).length + (baselineResult ? 1 : 0),
     });
     sessions = sessions.slice(-30);
     saveSessions();
@@ -919,15 +979,11 @@ async function loadTestCases() {
     const data = await apiJson("/api/test-cases");
     if (data && Array.isArray(data.cases)) {
       availableTestCases = data.cases;
-      byId("scenario-note").textContent = MOCK_MODE ?
-        "MOCK MODE: segment speeds are simulated for UI testing." :
-        "Traffic scenario is sent to the API; segment speeds come from the backend. Hospital locations are provisional.";
     } else if (Array.isArray(data)) {
       availableTestCases = data;
     }
   } catch (error) {
     availableTestCases = [];
-    byId("scenario-note").textContent = "Scenarios unavailable — reload to retry. Custom routing remains available.";
   }
 
   testCaseSelect.innerHTML =
@@ -941,14 +997,81 @@ async function loadTestCases() {
   testCaseSelect.value = "custom";
 }
 
+function updateTrafficScenarioNote() {
+  if (MOCK_MODE) {
+    byId("scenario-note").textContent = "MOCK MODE: straight-line routes and simulated speeds for UI testing.";
+    return;
+  }
+  const caseId = testCaseSelect.value;
+  const scenario = getSelectedTrafficScenario();
+  if (!trafficScenarioSelect.value) {
+    byId("scenario-note").textContent = "No live traffic speeds; the assumed speed is used on every segment.";
+  } else if (!scenario) {
+    byId("scenario-note").textContent = "Select TC01, TC02, or TC03 to run this traffic case.";
+  } else if (scenario.kind === "road_closure") {
+    byId("scenario-note").textContent = `${caseId}: closes ${scenario.closed_road_count} randomly selected roads using fixed seed ${scenario.random_seed}; remaining roads are fixed at 40 km/h.`;
+  } else {
+    byId("scenario-note").textContent = `${caseId}: simulated 12 km/h on ${scenario.event_edges.length} directed peak-hour segments; remaining roads use the assumed speed.`;
+  }
+}
+
+function getSelectedTrafficScenario() {
+  if (!trafficScenarioSelect.value || testCaseSelect.value === "custom") {
+    return null;
+  }
+  const id = Traffic.scenarioId(trafficScenarioSelect.value, testCaseSelect.value);
+  // Mock mode has no scenario catalogue; the ID alone drives the mock data.
+  if (MOCK_MODE) return id ? { id } : null;
+  return availableTrafficScenarios.find((item) => item.id === id) || null;
+}
+
+async function loadTrafficScenarios() {
+  if (MOCK_MODE) return;
+  try {
+    availableTrafficScenarios = await apiJson("/api/traffic-scenarios");
+    if (!Array.isArray(availableTrafficScenarios) || availableTrafficScenarios.length !== 6) {
+      throw new Error("Expected traffic scenarios for TC01-TC03");
+    }
+  } catch (error) {
+    availableTrafficScenarios = [];
+    trafficScenarioSelect.disabled = true;
+    // Usually an old server process that predates /api/traffic-scenarios: restart it.
+    byId("scenario-note").textContent = "Traffic events unavailable (restart the server if the code was just updated); fixed-speed routing still works.";
+    return;
+  }
+  updateTrafficScenarioNote();
+}
+
+function syncClosureSpeedControl() {
+  const closureSelected = trafficScenarioSelect.value === "road_closure";
+  if (closureSelected) vehicleSpeed.value = "40";
+  vehicleSpeed.disabled = closureSelected;
+}
+
 testCaseSelect.addEventListener("change", () => {
+  if (testCaseSelect.value === "custom" && trafficScenarioSelect.value) {
+    trafficScenarioSelect.value = "";
+  }
   applyTestCaseSelection();
+  syncClosureSpeedControl();
+  updateTrafficScenarioNote();
   if (testCaseSelect.value === "custom") setStatus("", "READY TO FIND ROUTE");
 });
 
-for (const input of [algorithmSelect, vehicleSpeed, scenarioSelect, objectiveSelect]) {
+trafficScenarioSelect.addEventListener("change", () => {
+  if (trafficScenarioSelect.value && testCaseSelect.value === "custom") {
+    testCaseSelect.value = "TC01";
+  }
+  applyTestCaseSelection();
+  syncClosureSpeedControl();
+  updateTrafficScenarioNote();
+  setStatus("", "READY TO FIND ROUTE");
+});
+
+for (const input of [algorithmSelect, vehicleSpeed, objectiveSelect]) {
   input.addEventListener("change", () => {
     invalidateRoute();
+    updateTrafficScenarioNote();
     setStatus("", "READY TO FIND ROUTE");
   });
 }
@@ -966,6 +1089,8 @@ try {
   setTheme("dark");
 }
 loadTestCases();
+loadTrafficScenarios();
+syncClosureSpeedControl();
 renderHistory();
 
 updateSimulationControls();

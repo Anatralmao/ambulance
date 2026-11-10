@@ -34,6 +34,40 @@ chuẩn hóa response, dữ liệu giả), [static/JS/app.js](../static/JS/app.j
 [templates/index.html](../templates/index.html), [static/CSS/app.css](../static/CSS/app.css),
 [tests/js/traffic.test.mjs](../tests/js/traffic.test.mjs).
 
+## Bản ghép buổi 2 (nhánh `buoi2-integration`, 07/11)
+
+Gộp backend của Giang (6 kịch bản, closure seed, Overpass có fallback) và Chóc (`objective`)
+với giao diện N4, trên nền bản sửa mới nhất của nhánh test (commit "wh"). Giao diện **theo contract
+backend trong [INTERFACE.md](INTERFACE.md)**; đề xuất contract cũ bên dưới không còn dùng.
+
+- Ô **Traffic event**: No event / Peak-hour (12 km/h) / Road closure. Ghép với TC đang chọn thành
+  `traffic_scenario_id` (`traffic_jam_tc01`, `road_closure_tc02`...). Ô **Optimize for** gửi `objective`.
+- Mỗi lần Find route gọi `/api/route` với `objective=distance` và `time`; có sự kiện thì gọi thêm
+  bản không sự kiện (baseline). Bảng 2 dòng + câu so sánh mục tiêu + dòng so sánh có/không sự kiện.
+- Màu đoạn lấy từ `segment_speeds_kmh` (12/40 km/h = đỏ). Tuyến còn lại vẽ nét đứt **cùng màu**,
+  nên đoạn tắc mà tuyến nhanh nhất né vẫn thấy trên bản đồ.
+- Bảng kết quả kéo được trở lại (mặc định góc dưới phải); tính kéo đúng với `--ui-scale`.
+- `?mock=1` dùng cùng 3 sự kiện (đường thẳng, tốc độ giả).
+
+Kiểm tra trên bản đồ Hà Nội thật: `RUN_DATASET_TESTS=1` 3/3 pass; trình duyệt 3 TC × 3 sự kiện.
+Giờ cao điểm: tuyến nhanh nhất dài hơn nhưng nhanh hơn ở cả 3 TC (TC01 +0.07 km / −22.9 s,
+TC02 +0.04 km / −25.3 s, TC03 +0.01 km / −35.0 s). Đóng đường: đi vòng, +36 s đến +1 min 16 s.
+
+Cập nhật 08/11 (gộp nhánh `n3-buoi2-time-routing` của Xuyến): cạnh song song có ID và metadata
+riêng (B02-04). Khi review sửa thêm 3 lỗi (có test): tìm đường theo thời gian luôn tính 40 km/h
+nên với Assumed speed khác (ví dụ 15 km/h) tuyến *Fastest* có thể chậm hơn *Shortest*; đường một
+chiều làm lệch cờ tốc độ riêng; tốc độ riêng của đường chỉ áp cho mục tiêu thời gian nên ETA hai
+mục tiêu không so được. Giao diện N4 hiện tên đường của đoạn đang chạy ("segment i/n · Phố Huế ·
+40 km/h") từ `segment_edge_metadata`. Kiểm tra: 3 TC × 3 sự kiện × 40/15/60 km/h trên bản đồ thật,
+Fastest không chậm hơn Shortest, A* = Dijkstra.
+
+Cập nhật 08/11 (tối): API trả thêm `traffic_event_edge_coordinates`; bản đồ vẽ đường bị đóng
+(nét đen + dấu ✕, chú giải CLOSED) và đoạn tắc giờ cao điểm (viền đỏ chấm), kể cả khi tuyến né chúng.
+Kiểm tra trên bản đồ thật: 3 TC đều hiện 2 dấu ✕ khi đóng đường, 5 đoạn khi giờ cao điểm.
+
+Còn mở: quyết định nguồn bản đồ (Overpass hay `hanoi_map.json`); kịch bản sự kiện vẫn khai báo theo cặp node, nên khi có hai đường
+song song giữa cùng cặp node thì cả cặp bị coi là tắc.
+
 ## Quy ước đặt tên đã theo
 
 Theo mục "Quy ước" của [INTERFACE.md](INTERFACE.md) và các trường có sẵn trong API:

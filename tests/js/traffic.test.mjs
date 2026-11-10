@@ -1,16 +1,26 @@
-// Chạy: node --test tests/js
+// Run: node --test tests/js/*.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 const Traffic = createRequire(import.meta.url)("../../static/JS/traffic.js");
 
-const body = (scenario_id, objective) => ({
+const body = (traffic_scenario_id, objective) => ({
   start: { lat: 21.0126, lng: 105.8678 }, goal: { lat: 21.0058, lng: 105.8501 },
-  algorithm: "astar", speed_kmh: 40, scenario_id, objective,
+  algorithm: "astar", speed_kmh: 40, traffic_scenario_id, objective,
 });
 const sum = (xs) => xs.reduce((s, x) => s + x, 0);
 
-test("API Buổi 1 (chưa có giao thông) vẫn hiển thị được, tốc độ = tốc độ cố định", () => {
+test("UI events map to the backend scenario IDs for TC01-TC03 only", () => {
+  assert.equal(Traffic.scenarioId("peak_hour", "TC01"), "traffic_jam_tc01");
+  assert.equal(Traffic.scenarioId("road_closure", "TC03"), "road_closure_tc03");
+  assert.equal(Traffic.scenarioId("", "TC02"), null);
+  assert.equal(Traffic.scenarioId("peak_hour", "custom"), null);
+  assert.equal(Traffic.eventOfScenario("traffic_jam_tc02"), "peak_hour");
+  assert.equal(Traffic.eventOfScenario("road_closure_tc01"), "road_closure");
+  assert.equal(Traffic.eventOfScenario(null), "");
+});
+
+test("A response without segment speeds still renders at the fixed speed", () => {
   const r = Traffic.normalize({ coordinates: [[0, 0], [0, 1], [0, 2]], distance_km: 2, speed_kmh: 40,
     segment_distances_km: [1, 1], segment_durations_sec: [90, 90], estimated_time_sec: 180 });
   assert.deepEqual(r.segment_speeds_kmh, [40, 40]);
@@ -18,38 +28,88 @@ test("API Buổi 1 (chưa có giao thông) vẫn hiển thị được, tốc đ
   assert.equal(r.traffic_applied, false);
 });
 
-test("Trạng thái đoạn theo tỉ lệ tốc độ", () => {
+test("Backend segment speeds drive the colours: 12 km/h of 40 is a jam", () => {
+  const r = Traffic.normalize({ coordinates: [[0, 0], [0, 1], [0, 2]], distance_km: 2, speed_kmh: 40,
+    segment_distances_km: [1, 1], segment_speeds_kmh: [12, 40], segment_durations_sec: [300, 90],
+    estimated_time_sec: 390, traffic_scenario_id: "traffic_jam_tc01" });
+  assert.deepEqual(r.segment_status, ["jam", "free"]);
+  assert.equal(r.traffic_applied, true);
+});
+
+test("Segment status thresholds", () => {
   assert.equal(Traffic.statusFor(40, 40), "free");
   assert.equal(Traffic.statusFor(20, 40), "slow");
   assert.equal(Traffic.statusFor(5, 40), "jam");
 });
 
-for (const s of Traffic.SCENARIOS) for (const o of Traffic.OBJECTIVES) {
-  test(`mock ${s.id}/${o.id}: tổng thời lượng đoạn = ETA, mảng đủ độ dài`, () => {
-    const r = Traffic.normalize(Traffic.mockRoute(body(s.id, o.id)));
+for (const event of Traffic.EVENTS) for (const o of Traffic.OBJECTIVES) {
+  test(`mock ${event.id || "no event"}/${o.id}: segment times sum to ETA`, () => {
+    const id = Traffic.scenarioId(event.id, "TC01");
+    const r = Traffic.normalize(Traffic.mockRoute(body(id, o.id)));
     const n = r.coordinates.length - 1;
-    for (const k of ["segment_distances_km", "segment_durations_sec", "segment_speeds_kmh", "segment_status", "segment_ids"])
+    for (const k of ["segment_distances_km", "segment_durations_sec", "segment_speeds_kmh", "segment_status", "segment_edges", "segment_edge_ids", "segment_edge_metadata"])
       assert.equal(r[k].length, n, k);
     assert.ok(Math.abs(sum(r.segment_durations_sec) - r.estimated_time_sec) < 1e-6);
-    assert.equal(r.scenario_id, s.id);
+    assert.equal(r.traffic_scenario_id, id);
   });
 }
 
-test("Tắc trục chính: tuyến nhanh nhất dài hơn nhưng nhanh hơn tuyến ngắn nhất", () => {
-  const d = Traffic.mockRoute(body("main_road_jam", "distance"));
-  const t = Traffic.mockRoute(body("main_road_jam", "time"));
+test("Mock peak hour: the fastest route is longer but faster than the shortest", () => {
+  const d = Traffic.mockRoute(body("traffic_jam_tc01", "distance"));
+  const t = Traffic.mockRoute(body("traffic_jam_tc01", "time"));
   const diff = Traffic.compare(d, t);
   assert.ok(diff.extra_km > 0 && diff.saved_sec > 0, JSON.stringify(diff));
 });
 
-test("Thông thoáng: hai mục tiêu cho cùng tuyến", () => {
-  const diff = Traffic.compare(Traffic.mockRoute(body("free_flow", "distance")), Traffic.mockRoute(body("free_flow", "time")));
-  assert.equal(diff.extra_km, 0); assert.equal(diff.saved_sec, 0);
+test("Mock with no event: both objectives give the same route", () => {
+  const d = Traffic.mockRoute(body(null, "distance"));
+  const t = Traffic.mockRoute(body(null, "time"));
+  assert.ok(Traffic.sameRoute(d, t));
 });
 
-test("colorRuns gộp đoạn liền nhau cùng màu và không mất điểm", () => {
-  const r = Traffic.normalize(Traffic.mockRoute(body("main_road_jam", "distance")));
+test("Mock road closure detours for both objectives at a fixed 40 km/h", () => {
+  const d = Traffic.mockRoute(body("road_closure_tc01", "distance"));
+  const t = Traffic.mockRoute(body("road_closure_tc01", "time"));
+  assert.ok(Traffic.sameRoute(d, t));
+  assert.ok(!Traffic.sameRoute(d, Traffic.mockRoute(body(null, "distance"))));
+  assert.equal(d.speed_kmh, 40);
+});
+
+test("colorRuns merges same-colour segments without losing points", () => {
+  const r = Traffic.normalize(Traffic.mockRoute(body("traffic_jam_tc01", "distance")));
   const runs = Traffic.colorRuns(r);
   assert.ok(runs.length >= 3);
   assert.equal(sum(runs.map((x) => x.coords.length - 1)), r.coordinates.length - 1);
+});
+
+test("roadName uses the OSM name, then the road type, else nothing", () => {
+  const route = { segment_edge_metadata: [{ name: "Phố Huế", highway: "primary" }, { highway: "living_street" }, {}] };
+  assert.equal(Traffic.roadName(route, 0), "Phố Huế");
+  assert.equal(Traffic.roadName(route, 1), "living street");
+  assert.equal(Traffic.roadName(route, 2), "");
+  assert.equal(Traffic.roadName({}, 0), "");
+});
+
+test("A simulated jam stays red at a low assumed speed", () => {
+  const r = Traffic.normalize({ coordinates: [[0, 0], [0, 1], [0, 2]], distance_km: 2, speed_kmh: 15,
+    segment_distances_km: [1, 1], segment_speeds_kmh: [12, 15], segment_durations_sec: [300, 240],
+    segment_speed_sources: ["simulated", "no_live_data_assumed"], estimated_time_sec: 540,
+    traffic_scenario_id: "traffic_jam_tc01" });
+  assert.deepEqual(r.segment_status, ["jam", "free"]);
+});
+
+test("Closed-road coordinates: one mark per road, both directions merged", () => {
+  const ab = [[21.0, 105.0], [21.0, 105.001]];
+  const ba = [[21.0, 105.001], [21.0, 105.0]];
+  const far = [[21.01, 105.01], [21.01, 105.011]];
+  const route = { traffic_event_edge_coordinates: [ab, ba, far, "bad"] };
+  assert.equal(Traffic.eventEdges(route).length, 3);
+  assert.equal(Traffic.closedRoadMarks(Traffic.eventEdges(route)).length, 2);
+  assert.deepEqual(Traffic.eventEdges({}), []);
+});
+
+test("Mock closure reports the closed part of the main road", () => {
+  const r = Traffic.mockRoute(body("road_closure_tc01", "time"));
+  assert.ok(Traffic.eventEdges(r).length > 0);
+  assert.equal(Traffic.eventEdges(Traffic.mockRoute(body(null, "time"))).length, 0);
 });
